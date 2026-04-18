@@ -2,27 +2,11 @@
   publish = "."
 
 [[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
   for = "/*.jsx"
   [headers.values]
     Content-Type = "text/babel; charset=utf-8"
-    Cache-Control = "no-cache, must-revalidate"
-
-[[headers]]
-  for = "/*.html"
-  [headers.values]
-    Cache-Control = "no-cache, must-revalidate"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "no-cache, must-revalidate"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "no-cache, must-revalidate"
-
-[[headers]]
-  for = "/"
-  [headers.values]
-    Cache-Control = "no-cache, must-revalidate"
