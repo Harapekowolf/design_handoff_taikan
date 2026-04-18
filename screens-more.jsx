@@ -7,7 +7,7 @@ function OutfitScreen() {
     <div className="screen">
       <div className="outfit-wrap">
         <div className="outfit-hero">
-          <div className="eyebrow">Today's Outfit · 2026.04.18</div>
+          <div className="eyebrow">Today's Outfit · {n.timeLabel.split('(')[0].trim()}</div>
           <h2>{d.headline}</h2>
           <div className="sub">{d.subline}。日向と日陰で体感が5°C以上違う一日です。</div>
           <div className="outfit-context">

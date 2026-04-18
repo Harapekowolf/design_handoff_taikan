@@ -3,7 +3,8 @@
 function HourlyScreen({ tweaks }) {
   const hours = window.APP_DATA.hourly;
   const nowH = window.APP_DATA.now;
-  const nowHour = 14;
+  const nowTime = (nowH.timeLabel.split(') ')[1] || '').trim();
+  const nowHour = parseInt(nowTime.slice(0, 2), 10) || 14;
 
   const width = 880;
   const height = 280;
@@ -49,7 +50,7 @@ function HourlyScreen({ tweaks }) {
 
           {/* now line */}
           <line x1={x(nowHour - 6)} x2={x(nowHour - 6)} y1={padT} y2={padT + innerH} stroke="#d94b1a" strokeDasharray="3 3" strokeWidth="1" />
-          <text x={x(nowHour - 6) + 4} y={padT + 10} fontSize="9" fill="#d94b1a" fontFamily="JetBrains Mono" letterSpacing="0.08em">NOW · 14:20</text>
+          <text x={x(nowHour - 6) + 4} y={padT + 10} fontSize="9" fill="#d94b1a" fontFamily="JetBrains Mono" letterSpacing="0.08em">NOW · {nowTime}</text>
 
           {/* air temp dashed */}
           <path d={airPath} fill="none" stroke="#8a8a8a" strokeWidth="1" strokeDasharray="3 3" />

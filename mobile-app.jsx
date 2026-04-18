@@ -94,7 +94,7 @@ function MobileApp() {
 
 function screenTitle(s) {
   return {
-    home: '東京・渋谷', hourly: '1時間ごと', weekly: '週間予報',
+    home: window.APP_DATA.now.location, hourly: '1時間ごと', weekly: '週間予報',
     outfit: '今日の服装', map: '地域比較', colors: '服の色と体感',
   }[s];
 }
@@ -104,7 +104,7 @@ function MHeader({ title }) {
     <div className="m-header">
       <div className="loc">
         <span className="name">{title}</span>
-        <span className="time">2026.04.18 SAT · 14:20</span>
+        <span className="time">{window.APP_DATA.now.timeLabel}</span>
       </div>
       <span className="brand">taikan.</span>
     </div>
@@ -247,7 +247,7 @@ function ShadeGlyph() {
 function HourlyM() {
   const hours = window.APP_DATA.hourly;
   const nowH = window.APP_DATA.now;
-  const nowHour = 14;
+  const nowHour = parseInt((nowH.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
 
   const width = 340, height = 160;
   const padL = 26, padR = 8, padT = 12, padB = 22;
@@ -385,7 +385,7 @@ function OutfitM() {
   return (
     <div>
       <div className="outfit-hero-m">
-        <div className="eyebrow">Today's Outfit · 2026.04.18</div>
+        <div className="eyebrow">Today's Outfit · {n.timeLabel.split('(')[0].trim()}</div>
         <h2>{d.headline}</h2>
         <div className="sub">{d.subline}。日向と日陰で体感が5°C以上違う一日です。</div>
         <div className="outfit-ctx">
