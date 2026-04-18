@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netlify --version)",
+      "Bash(python3 -m http.server 8765)",
+      "Bash(kill %1)",
+      "Bash(xargs kill *)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
