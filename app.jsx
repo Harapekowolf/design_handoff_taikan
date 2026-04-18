@@ -122,7 +122,7 @@ function App() {
     <ChromeWindow
       tabs={[{ title: 'taikan. — 体感温度' }, { title: 'weather.go.jp' }]}
       activeIndex={0}
-      url="taikan.app/東京・渋谷"
+      url={`taikan.app/${window.APP_DATA.now.location}`}
       width={1180}
       height={760}
     >
