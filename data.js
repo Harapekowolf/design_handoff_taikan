@@ -14,6 +14,9 @@ window.APP_DATA = {
     uv: 7,
     solar: 780,             // W/m² 日射量
     pressure: 1012,
+    weatherCode: 0,
+    cond: 'sun',
+    condNote: '晴れ',
     sunrise: '05:02',
     sunset: '18:14',
   },

@@ -194,6 +194,29 @@ function IconShirt()   { return <svg {...iprops}><path d="M6 3l-3.5 2 1.5 3 2-1v
 function IconMap()     { return <svg {...iprops}><path d="M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2V5z"/><path d="M7.5 3v12M12.5 5v12"/></svg>; }
 function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.9 2.5 10c0 3 1.6 5 4.5 5 1.5 0 2-.8 2-1.8s-.5-1.5.2-2.2c.7-.7 1.5-.5 2.8-.5 2.8 0 5.5-1.2 5.5-4C17.5 4.7 14.1 2.5 10 2.5z"/><circle cx="6.5" cy="8" r="0.8" fill="currentColor"/><circle cx="10" cy="5.5" r="0.8" fill="currentColor"/><circle cx="13.5" cy="7" r="0.8" fill="currentColor"/></svg>; }
 
+// Physics-ish feels-like model for clothing color + cover.
+// Baseline: at wind=2 m/s, RH=50% → 0.007 °C per W/m² (matches feelsLikeSun).
+// Wind cools convectively, humid air hinders sweat evaporation.
+function sunHeatCoef(wind, rh) {
+  const BASE = 0.007;
+  const convMult = (6 + 3.7 * 2) / (6 + 3.7 * Math.max(0, wind));
+  const rhMult = 1 + Math.max(0, (rh - 50) / 250);
+  return BASE * convMult * rhMult;
+}
+const COVER_FRAC = { hat: 0.36, parasol: 0.54 };
+
+// JMA-style apparent-temperature decomposition (AT = T + 0.33·e − 0.70·WS − 4).
+// Show each factor's departure from the neutral baseline (RH 50%, WS 0).
+function vaporPressureHpa(t, rh) {
+  return (rh / 100) * 6.105 * Math.exp((17.27 * t) / (237.7 + t));
+}
+function humidityDeltaC(t, rh) {
+  return 0.33 * (vaporPressureHpa(t, rh) - vaporPressureHpa(t, 50));
+}
+function windDeltaC(windMS) {
+  return -0.70 * (windMS || 0);
+}
+
 // WBGT (暑さ指数) approx: Ono/Tonouchi-ish fit using Ta, RH, solar.
 function wbgtCategory(v) {
   if (v < 21) return { label: 'ほぼ安全', level: 'safe',   note: '熱中症の危険は少ない' };
@@ -238,13 +261,38 @@ function HomeM({ inSun, setInSun, tweaks }) {
 
   const isNight = (d.solar || 0) <= 50;
   const sunActive = inSun && !isNight;
-  const colorDelta = sunActive ? (color === 'black' ? 5.6 : 0) : 0;
-  const coverDelta = sunActive ? (cover === 'hat' ? -2 : cover === 'parasol' ? -3 : 0) : 0;
+  const solar = d.solar || 0;
+  const wind = d.windMS || 0;
+  const rh = d.humidity || 50;
+  const coef = sunHeatCoef(wind, rh);
+  const blackMax = +(solar * coef).toFixed(1);
+  const colorDelta = sunActive && color === 'black' ? blackMax : 0;
+  const hatMax = +(solar * coef * COVER_FRAC.hat).toFixed(1);
+  const parasolMax = +(solar * coef * COVER_FRAC.parasol).toFixed(1);
+  const coverDelta = sunActive
+    ? (cover === 'hat' ? -hatMax : cover === 'parasol' ? -parasolMax : 0)
+    : 0;
   const modDelta = colorDelta + coverDelta;
 
   const baseSun = d.feelsLikeSun + (tweaks.solarBoost || 0);
   const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
   const sunCardVal = baseSun + modDelta;
+
+  // API-driven factor contributions
+  const solarDelta = +(d.feelsLikeSun - d.feelsLikeShade).toFixed(1);
+  const humDelta = +humidityDeltaC(d.airTemp, rh).toFixed(1);
+  const windDelta = +windDeltaC(wind).toFixed(1);
+  const cond = d.cond || 'sun';
+  const caption = isNight
+    ? '日没後、気温と体感はほぼ同じ。'
+    : cond === 'rain'
+      ? '雨で日射が弱く、気温に近い体感です。'
+      : cond === 'cloud'
+        ? '曇りで日差しは控えめ、気温どおりに感じます。'
+        : inSun
+          ? (solarDelta >= 5 ? '日差しが強く、体は夏日のよう。' : '日差しで気温より少し暑く感じます。')
+          : '日陰では過ごしやすい陽気。';
+  const advice = homeAdvice(d, solarDelta, humDelta, windDelta, isNight, hatMax);
 
   return (
     <div>
@@ -255,7 +303,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span className="unit">°C</span>
         </div>
         <div className="caption">
-          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{isNight ? '日没後、気温と体感はほぼ同じ。' : inSun ? '日差しが強く、体は夏日のよう。' : '日陰では過ごしやすい春の陽気。'}
+          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{caption}
         </div>
         <div className="air">
           <span><span className="k">Air</span> <span className="v">{d.airTemp.toFixed(1)}°</span></span>
@@ -284,7 +332,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
         <div className={`color-toggle ${!sunActive ? 'inactive' : ''}`}>
           <button className={color === 'black' ? 'active' : ''} onClick={() => setColor('black')}>
             <span className="sw" style={{ background: '#161616' }} /> 黒
-            {sunActive && <span className="delta">+5.6°</span>}
+            {sunActive && blackMax > 0 && <span className="delta">+{blackMax.toFixed(1)}°</span>}
           </button>
           <button className={color === 'white' ? 'active' : ''} onClick={() => setColor('white')}>
             <span className="sw" style={{ background: '#f2f0ea', border: '1px solid var(--rule)' }} /> 白
@@ -297,13 +345,23 @@ function HomeM({ inSun, setInSun, tweaks }) {
           </button>
           <button className={cover === 'hat' ? 'active' : ''} onClick={() => setCover('hat')}>
             <HatGlyph /> 帽子
-            {sunActive && <span className="delta">−2°</span>}
+            {sunActive && hatMax > 0 && <span className="delta">−{hatMax.toFixed(1)}°</span>}
           </button>
           <button className={cover === 'parasol' ? 'active' : ''} onClick={() => setCover('parasol')}>
             <ParasolGlyph /> 日傘
-            {sunActive && <span className="delta">−3°</span>}
+            {sunActive && parasolMax > 0 && <span className="delta">−{parasolMax.toFixed(1)}°</span>}
           </button>
         </div>
+
+        {sunActive && (
+          <div className="delta-breakdown">
+            日射 <span className="mono">{solar}</span>
+            <span className="sep">·</span>
+            風 <span className="mono">{wind.toFixed(1)}m/s</span>
+            <span className="sep">·</span>
+            湿度 <span className="mono">{rh}%</span>
+          </div>
+        )}
       </div>
 
       <div className="ss-cards">
@@ -330,12 +388,12 @@ function HomeM({ inSun, setInSun, tweaks }) {
       </div>
       <div className="m-factors">
         <FactorRow label="気温" value={d.airTemp} max={40} unit="°C" />
-        <FactorRow label="日射" value={d.solar} max={1000} unit="W/m²" delta={+5.2} pos />
-        <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={+1.4} pos />
-        <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={-0.3} neg />
+        <FactorRow label="日射" value={d.solar} max={1000} unit="W/m²" delta={solarDelta} pos={solarDelta > 0} />
+        <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={humDelta} pos={humDelta > 0} neg={humDelta < 0} />
+        <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={windDelta} neg={windDelta < 0} />
         <FactorRow label="服装" value={tweaks.clothing === 'light' ? 1 : tweaks.clothing === 'medium' ? 2 : 3} max={3} unit="lv" delta={tweaks.clothing === 'light' ? -0.4 : tweaks.clothing === 'heavy' ? +1.1 : +0.2} />
-        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={5.6} unit="°" pos={colorDelta > 0} />
-        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={3} unit="°" neg={coverDelta < 0} />
+        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={Math.max(blackMax, 0.1)} unit="°" pos={colorDelta > 0} />
+        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={Math.max(parasolMax, 0.1)} unit="°" neg={coverDelta < 0} />
       </div>
 
       <div className="section-head">
@@ -343,11 +401,48 @@ function HomeM({ inSun, setInSun, tweaks }) {
       </div>
       <div className="insight">
         <div className="eyebrow">Advice</div>
-        <div className="t">日向は夏日、日陰は春の陽気</div>
-        <div className="d">半袖に薄手の羽織りで両方に対応できます。帽子があると日向の体感が約2°C下がります。</div>
+        <div className="t">{advice.t}</div>
+        <div className="d">{advice.d}</div>
       </div>
     </div>
   );
+}
+
+function homeAdvice(d, solarDelta, humDelta, windDelta, isNight, hatMax) {
+  if (isNight) {
+    return {
+      t: '日没後は気温と体感がほぼ一致',
+      d: '日射による上乗せはありません。気温の変化を目安に。',
+    };
+  }
+  if (d.cond === 'rain') {
+    return {
+      t: `雨・${d.windDir} ${d.windMS.toFixed(1)}m/s`,
+      d: '日射が弱く、体感は気温に近め。濡れると気化冷却でさらに冷えます。',
+    };
+  }
+  if (solarDelta >= 5) {
+    return {
+      t: `日向は${d.feelsLikeSun.toFixed(0)}°、日陰は${d.feelsLikeShade.toFixed(0)}°`,
+      d: `日差しで体感は気温+${solarDelta.toFixed(1)}°。帽子で約${hatMax.toFixed(1)}°下がります。`,
+    };
+  }
+  if (humDelta >= 1.5) {
+    return {
+      t: '湿度が体感を押し上げる陽気',
+      d: `湿度${d.humidity}%で気温より約+${humDelta.toFixed(1)}°。風通しのよい服装を。`,
+    };
+  }
+  if (windDelta <= -2) {
+    return {
+      t: `${d.windDir} ${d.windMS.toFixed(1)}m/sの風が涼しい`,
+      d: `風による冷却で体感は${windDelta.toFixed(1)}°。肌寒ければ羽織りを。`,
+    };
+  }
+  return {
+    t: '気温と体感の差は小さめ',
+    d: '屋外も屋内も、軽い服装で快適に過ごせます。',
+  };
 }
 
 function FactorRow({ label, value, max, unit, delta, pos, neg }) {
@@ -412,6 +507,7 @@ function HourlyM() {
   const hours = window.APP_DATA.hourly;
   const nowH = window.APP_DATA.now;
   const nowHour = parseInt((nowH.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
+  const insights = hourlyInsights(hours, nowH);
 
   const width = 340, height = 160;
   const padL = 26, padR = 8, padT = 12, padB = 22;
@@ -547,22 +643,64 @@ function HourlyM() {
       <div className="insights">
         <div className="insight">
           <div className="eyebrow">日差しのピーク</div>
-          <div className="t">13:00 – 14:00</div>
-          <div className="d">日向と日陰で最大 +6.3°C の差。帽子や日傘で体感は約2°C下がります。</div>
+          <div className="t">{insights.peak.t}</div>
+          <div className="d">{insights.peak.d}</div>
         </div>
         <div className="insight">
           <div className="eyebrow">涼しくなる時間</div>
-          <div className="t">18:00 以降</div>
-          <div className="d">日没とともに日射がゼロに。気温と体感がほぼ一致します。</div>
+          <div className="t">{insights.cool.t}</div>
+          <div className="d">{insights.cool.d}</div>
         </div>
         <div className="insight">
           <div className="eyebrow">風の影響</div>
-          <div className="t">南南西 2–3 m/s</div>
-          <div className="d">弱い風のため冷却効果は限定的。−0.3°Cほど。</div>
+          <div className="t">{insights.wind.t}</div>
+          <div className="d">{insights.wind.d}</div>
         </div>
       </div>
     </div>
   );
+}
+
+function hourlyInsights(hours, now) {
+  let peakI = 0, peakDiff = -Infinity;
+  hours.forEach((h, i) => {
+    const diff = h.sun - h.shade;
+    if ((h.solar || 0) > 30 && diff > peakDiff) { peakDiff = diff; peakI = i; }
+  });
+  const peakH = hours[peakI].h;
+  const peakEnd = Math.min(peakH + 1, 23);
+  const hatCool = +(peakDiff * COVER_FRAC.hat).toFixed(1);
+  const peak = peakDiff > 0 ? {
+    t: `${String(peakH).padStart(2, '0')}:00 – ${String(peakEnd).padStart(2, '0')}:00`,
+    d: `日向と日陰で最大 +${peakDiff.toFixed(1)}°C の差。帽子で体感は約${hatCool.toFixed(1)}°C下がります。`,
+  } : {
+    t: '日差しの弱い一日',
+    d: '日向と日陰の体感差は小さく、天気は穏やかです。',
+  };
+
+  let coolI = -1;
+  for (let i = peakI + 1; i < hours.length; i++) {
+    if ((hours[i].solar || 0) < 30) { coolI = i; break; }
+  }
+  const cool = coolI >= 0 ? {
+    t: `${String(hours[coolI].h).padStart(2, '0')}:00 以降`,
+    d: '日射が弱まり、気温と体感がほぼ一致します。',
+  } : {
+    t: '日中は涼しくなりにくい',
+    d: '夕方まで日射が続く見込みです。長時間の屋外活動は水分補給を。',
+  };
+
+  const avgWind = hours.reduce((s, h) => s + (h.wind || 0), 0) / hours.length;
+  const windDeltaAvg = windDeltaC(avgWind);
+  const windLabel = now.windDir ? `${now.windDir} ${avgWind.toFixed(1)} m/s` : `${avgWind.toFixed(1)} m/s`;
+  const windDesc = avgWind < 2
+    ? `弱い風のため冷却効果は限定的。${windDeltaAvg.toFixed(1)}°C ほど。`
+    : avgWind < 5
+      ? `体感を ${windDeltaAvg.toFixed(1)}°C 下げる程度の風です。`
+      : `強い風で体感は ${windDeltaAvg.toFixed(1)}°C 低下。防風対策を。`;
+  const wind = { t: windLabel, d: windDesc };
+
+  return { peak, cool, wind };
 }
 
 // ─── WEEKLY ───
@@ -624,12 +762,18 @@ function CondGlyphM({ cond }) {
 function OutfitM() {
   const d = window.APP_DATA.outfit;
   const n = window.APP_DATA.now;
+  const diff = n.feelsLikeSun - n.feelsLikeShade;
+  const diffNote = diff >= 5
+    ? `日向と日陰で体感が${diff.toFixed(0)}°C以上違う一日です。`
+    : diff >= 2
+      ? `日向と日陰で体感が${diff.toFixed(1)}°C違います。`
+      : '日向・日陰の差は小さく、一着で一日対応できそうです。';
   return (
     <div>
       <div className="outfit-hero-m">
         <div className="eyebrow">Today's Outfit · {n.timeLabel.split('(')[0].trim()}</div>
         <h2>{d.headline}</h2>
-        <div className="sub">{d.subline}。日向と日陰で体感が5°C以上違う一日です。</div>
+        <div className="sub">{d.subline}。{diffNote}</div>
         <div className="outfit-ctx">
           <div className="oc"><span className="k">日向</span><span className="v">{n.feelsLikeSun.toFixed(1)}°</span></div>
           <div className="oc"><span className="k">日陰</span><span className="v">{n.feelsLikeShade.toFixed(1)}°</span></div>
@@ -661,6 +805,11 @@ function OutfitM() {
 // ─── MAP ───
 function MapM() {
   const regions = window.APP_DATA.regions;
+  const hi = regions.reduce((a, b) => (b.delta > a.delta ? b : a), regions[0]);
+  const lo = regions.reduce((a, b) => (b.delta < a.delta ? b : a), regions[0]);
+  const mapComment = hi.delta >= 3
+    ? `${hi.name}で日射による体感上乗せが最大 +${hi.delta.toFixed(1)}°C。${lo.name}は ${lo.delta > 0 ? '+' : ''}${lo.delta.toFixed(1)}°C と対照的。`
+    : '全国的に日差しによる体感の上乗せは限定的。';
   return (
     <div>
       <div className="eyebrow" style={{ marginBottom: 6 }}>Japan · Feels-like map</div>
@@ -699,7 +848,7 @@ function MapM() {
         ))}
       </div>
       <div style={{ marginTop: 16, fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        太平洋側は日差しで体感が気温を大きく上回っています。
+        {mapComment}
       </div>
     </div>
   );
@@ -708,25 +857,38 @@ function MapM() {
 // ─── COLORS ───
 function ColorsM() {
   const colors = window.APP_DATA.clothingColors;
+  const now = window.APP_DATA.now;
+  const solar = now.solar || 0;
+  const wind = now.windMS || 0;
+  const rh = now.humidity || 50;
+  // data.js deltaC values are calibrated for (solar=800, wind=2, rh=50),
+  // so the scaling factor is today's coef×solar normalized by that baseline.
+  const BASELINE = 800 * 0.007;
+  const todayCoef = sunHeatCoef(wind, rh);
+  const scale = (solar * todayCoef) / BASELINE;
+  const todayDelta = +(colors[colors.length - 1].deltaC * scale).toFixed(1);
   return (
     <div>
       <div className="c-intro">
         <div className="eyebrow">Clothing · Color & Heat</div>
-        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>5.6°C</span>変わる</h2>
+        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>{todayDelta.toFixed(1)}°C</span>変わる</h2>
         <div className="blurb">
-          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">24.8°C</span>・日射 <span className="mono">780 W/m²</span> では、黒は白より約 <strong>5.6°C</strong> 暑く感じます。
+          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">{now.airTemp.toFixed(1)}°C</span>・日射 <span className="mono">{solar} W/m²</span>・風 <span className="mono">{wind.toFixed(1)}m/s</span>・湿度 <span className="mono">{rh}%</span> では、黒は白より約 <strong>{todayDelta.toFixed(1)}°C</strong> 暑く感じます。
         </div>
       </div>
       <div className="color-grid-m">
-        {colors.map((c, i) => (
-          <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
-            <div className="c-name">{c.name}</div>
-            <div>
-              <div className="c-delta">+{c.deltaC.toFixed(1)}°</div>
-              <div className="c-surface">SURFACE · {c.surface}°C</div>
+        {colors.map((c, i) => {
+          const scaled = +(c.deltaC * scale).toFixed(1);
+          return (
+            <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
+              <div className="c-name">{c.name}</div>
+              <div>
+                <div className="c-delta">+{scaled.toFixed(1)}°</div>
+                <div className="c-surface">SURFACE · {c.surface}°C</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="c-notes">
         <div className="n">
