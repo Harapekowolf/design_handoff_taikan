@@ -6,12 +6,17 @@ function MobileApp() {
   const [screen, setScreen] = React.useState(
     () => localStorage.getItem('taikan.m.screen') || 'home'
   );
-  const [inSun, setInSun] = React.useState(true);
+  const [inSun, setInSun] = React.useState(
+    () => localStorage.getItem('taikan.m.inSun') !== '0'
+  );
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
 
   React.useEffect(() => {
     localStorage.setItem('taikan.m.screen', screen);
   }, [screen]);
+  React.useEffect(() => {
+    localStorage.setItem('taikan.m.inSun', inSun ? '1' : '0');
+  }, [inSun]);
 
   React.useEffect(() => {
     const on = () => forceUpdate();
@@ -145,9 +150,24 @@ function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.
 // ─── HOME ───
 function HomeM({ inSun, setInSun, tweaks }) {
   const d = window.APP_DATA.now;
-  const [color, setColor] = React.useState('black');
-  const colorDelta = inSun ? (color === 'black' ? 5.6 : 0) : 0;
-  const feels = (inSun ? d.feelsLikeSun + (tweaks.solarBoost || 0) : d.feelsLikeShade) + colorDelta;
+  const [color, setColor] = React.useState(
+    () => localStorage.getItem('taikan.m.color') || 'black'
+  );
+  const [cover, setCover] = React.useState(
+    () => localStorage.getItem('taikan.m.cover') || 'none'
+  );
+  React.useEffect(() => localStorage.setItem('taikan.m.color', color), [color]);
+  React.useEffect(() => localStorage.setItem('taikan.m.cover', cover), [cover]);
+
+  const isNight = (d.solar || 0) <= 50;
+  const sunActive = inSun && !isNight;
+  const colorDelta = sunActive ? (color === 'black' ? 5.6 : 0) : 0;
+  const coverDelta = sunActive ? (cover === 'hat' ? -2 : cover === 'parasol' ? -3 : 0) : 0;
+  const modDelta = colorDelta + coverDelta;
+
+  const baseSun = d.feelsLikeSun + (tweaks.solarBoost || 0);
+  const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
+  const sunCardVal = baseSun + modDelta;
 
   return (
     <div>
@@ -158,7 +178,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span className="unit">°C</span>
         </div>
         <div className="caption">
-          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{inSun ? '日差しが強く、体は夏日のよう。' : '日陰では過ごしやすい春の陽気。'}
+          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{isNight ? '日没後、気温と体感はほぼ同じ。' : inSun ? '日差しが強く、体は夏日のよう。' : '日陰では過ごしやすい春の陽気。'}
         </div>
         <div className="air">
           <span><span className="k">Air</span> <span className="v">{d.airTemp.toFixed(1)}°</span></span>
@@ -166,6 +186,12 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span><span className="k">風</span> <span className="v">{d.windMS}m/s</span></span>
           <span><span className="k">UV</span> <span className="v">{d.uv}</span></span>
         </div>
+
+        {isNight && (
+          <div className="night-note">
+            <span>☁ 日差しなし・色や日よけの効果はありません</span>
+          </div>
+        )}
 
         <div className="sun-shade-toggle">
           <button className={inSun ? 'active' : ''} onClick={() => setInSun(true)}>
@@ -176,13 +202,27 @@ function HomeM({ inSun, setInSun, tweaks }) {
           </button>
         </div>
 
-        <div className="color-toggle">
+        <div className={`color-toggle ${!sunActive ? 'inactive' : ''}`}>
           <button className={color === 'black' ? 'active' : ''} onClick={() => setColor('black')}>
             <span className="sw" style={{ background: '#161616' }} /> 黒
-            {inSun && <span className="delta">+5.6°</span>}
+            {sunActive && <span className="delta">+5.6°</span>}
           </button>
           <button className={color === 'white' ? 'active' : ''} onClick={() => setColor('white')}>
             <span className="sw" style={{ background: '#f2f0ea', border: '1px solid var(--rule)' }} /> 白
+          </button>
+        </div>
+
+        <div className={`cover-toggle ${!sunActive ? 'inactive' : ''}`}>
+          <button className={cover === 'none' ? 'active' : ''} onClick={() => setCover('none')}>
+            <CoverNoneGlyph /> なし
+          </button>
+          <button className={cover === 'hat' ? 'active' : ''} onClick={() => setCover('hat')}>
+            <HatGlyph /> 帽子
+            {sunActive && <span className="delta">−2°</span>}
+          </button>
+          <button className={cover === 'parasol' ? 'active' : ''} onClick={() => setCover('parasol')}>
+            <ParasolGlyph /> 日傘
+            {sunActive && <span className="delta">−3°</span>}
           </button>
         </div>
       </div>
@@ -190,8 +230,13 @@ function HomeM({ inSun, setInSun, tweaks }) {
       <div className="ss-cards">
         <div className="ss-c sun">
           <span className="lbl"><SunGlyph /> 日向</span>
-          <span className="n">{d.feelsLikeSun.toFixed(1)}°</span>
-          <span className="d">+{(d.feelsLikeSun - d.airTemp).toFixed(1)}° 気温比</span>
+          <span className="n">{sunCardVal.toFixed(1)}°</span>
+          <span className="d">
+            +{(sunCardVal - d.airTemp).toFixed(1)}° 気温比
+            {sunActive && modDelta !== 0 && (
+              <span className="mod">{modDelta > 0 ? '+' : ''}{modDelta.toFixed(1)}° 服装</span>
+            )}
+          </span>
         </div>
         <div className="ss-c shade">
           <span className="lbl"><ShadeGlyph /> 日陰</span>
@@ -210,6 +255,8 @@ function HomeM({ inSun, setInSun, tweaks }) {
         <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={+1.4} pos />
         <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={-0.3} neg />
         <FactorRow label="服装" value={tweaks.clothing === 'light' ? 1 : tweaks.clothing === 'medium' ? 2 : 3} max={3} unit="lv" delta={tweaks.clothing === 'light' ? -0.4 : tweaks.clothing === 'heavy' ? +1.1 : +0.2} />
+        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={5.6} unit="°" pos={colorDelta > 0} />
+        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={3} unit="°" neg={coverDelta < 0} />
       </div>
 
       <div className="section-head">
@@ -251,6 +298,32 @@ function ShadeGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3">
       <path d="M7 10a3 3 0 106 0 2.5 2.5 0 01-6 0z" fill="currentColor"/>
+    </svg>
+  );
+}
+function CoverNoneGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="10" cy="10" r="6"/>
+      <line x1="6" y1="14" x2="14" y2="6"/>
+    </svg>
+  );
+}
+function HatGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14 Q10 6 16 14"/>
+      <line x1="2.5" y1="14" x2="17.5" y2="14"/>
+    </svg>
+  );
+}
+function ParasolGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 11 Q10 3 17 11"/>
+      <line x1="3" y1="11" x2="17" y2="11"/>
+      <line x1="10" y1="11" x2="10" y2="17"/>
+      <path d="M10 17 Q10 18.5 11.5 18"/>
     </svg>
   );
 }
