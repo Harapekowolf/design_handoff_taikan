@@ -2,6 +2,11 @@
   publish = "."
 
 [[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
   for = "/*.jsx"
   [headers.values]
     Content-Type = "text/babel; charset=utf-8"
