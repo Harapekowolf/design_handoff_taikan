@@ -497,6 +497,15 @@ body {
 .legend .sw-sun { background: var(--accent); }
 .legend .sw-shade { background: var(--ink); }
 .legend .sw-air { border-bottom: 1px dashed var(--ink-4); height: 0; }
+.legend .chart-hint {
+  margin-left: auto;
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0;
+}
+.m-chart svg { cursor: crosshair; -webkit-user-select: none; user-select: none; }
 
 .hourly-scroll {
   margin-top: 14px;

@@ -389,6 +389,42 @@ function HourlyM() {
   const y = (v) => padT + (1 - (v - yMin) / (yMax - yMin)) * innerH;
   const mk = (k) => hours.map((h, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(h[k])}`).join(' ');
 
+  const svgRef = React.useRef(null);
+  const trackingRef = React.useRef(false);
+  const [selIdx, setSelIdx] = React.useState(null);
+
+  function pickIdx(clientX) {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return null;
+    const vbX = ((clientX - rect.left) / rect.width) * width;
+    const t = (vbX - padL) / innerW;
+    const i = Math.round(t * (hours.length - 1));
+    return Math.max(0, Math.min(hours.length - 1, i));
+  }
+  function onDown(e) {
+    trackingRef.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    const i = pickIdx(e.clientX);
+    if (i != null) setSelIdx(i);
+  }
+  function onMove(e) {
+    if (!trackingRef.current) return;
+    const i = pickIdx(e.clientX);
+    if (i != null) setSelIdx(i);
+  }
+  function onUp(e) {
+    trackingRef.current = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  const sel = selIdx != null ? hours[selIdx] : null;
+  const selX = sel ? x(selIdx) : 0;
+  const labelW = 86, labelH = 50;
+  const labelX = Math.max(padL - 2, Math.min(width - padR - labelW, selX - labelW / 2));
+  const labelY = padT + 2;
+
   return (
     <div>
       <div className="m-chart">
@@ -396,8 +432,18 @@ function HourlyM() {
           <span><span className="swatch sw-sun"></span>日向</span>
           <span><span className="swatch sw-shade"></span>日陰</span>
           <span><span className="swatch sw-air"></span>気温</span>
+          <span className="chart-hint">タップで値表示</span>
         </div>
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          style={{ display: 'block', touchAction: 'none' }}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        >
           {[15, 20, 25, 30].map(v => (
             <g key={v}>
               <line x1={padL} x2={width - padR} y1={y(v)} y2={y(v)} stroke="#efede8"/>
@@ -414,6 +460,21 @@ function HourlyM() {
           {hours.map((h, i) => i % 3 === 0 && (
             <text key={i} x={x(i)} y={height - 6} textAnchor="middle" fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">{String(h.h).padStart(2,'0')}</text>
           ))}
+          {sel && (
+            <g pointerEvents="none">
+              <line x1={selX} x2={selX} y1={padT} y2={padT + innerH} stroke="#0f0f0f" strokeWidth="0.6"/>
+              <circle cx={selX} cy={y(sel.sun)} r="3.2" fill="#d94b1a" stroke="#f7f5f0" strokeWidth="1"/>
+              <circle cx={selX} cy={y(sel.shade)} r="2.6" fill="#0f0f0f" stroke="#f7f5f0" strokeWidth="1"/>
+              <circle cx={selX} cy={y(sel.air)} r="2" fill="#8a8a8a" stroke="#f7f5f0" strokeWidth="1"/>
+              <g transform={`translate(${labelX}, ${labelY})`}>
+                <rect width={labelW} height={labelH} fill="#f7f5f0" stroke="#0f0f0f" strokeWidth="0.6"/>
+                <text x={6} y={11} fontSize="7" fill="#8a8a8a" fontFamily="JetBrains Mono" letterSpacing="0.08em">{String(sel.h).padStart(2,'0')}:00</text>
+                <text x={6} y={23} fontSize="9" fill="#d94b1a" fontFamily="JetBrains Mono">日向 {sel.sun.toFixed(1)}°</text>
+                <text x={6} y={34} fontSize="9" fill="#0f0f0f" fontFamily="JetBrains Mono">日陰 {sel.shade.toFixed(1)}°</text>
+                <text x={6} y={45} fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">気温 {sel.air.toFixed(1)}°</text>
+              </g>
+            </g>
+          )}
         </svg>
       </div>
 
