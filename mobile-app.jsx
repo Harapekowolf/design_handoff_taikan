@@ -208,8 +208,14 @@ function HomeM({ inSun, setInSun, tweaks }) {
 
   const isNight = (d.solar || 0) <= 50;
   const sunActive = inSun && !isNight;
-  const colorDelta = sunActive ? (color === 'black' ? 5.6 : 0) : 0;
-  const coverDelta = sunActive ? (cover === 'hat' ? -2 : cover === 'parasol' ? -3 : 0) : 0;
+  const solar = d.solar || 0;
+  const blackMax = +(solar * 0.007).toFixed(1);
+  const colorDelta = sunActive && color === 'black' ? blackMax : 0;
+  const hatMax = +(solar * 0.007 * 0.36).toFixed(1);
+  const parasolMax = +(solar * 0.007 * 0.54).toFixed(1);
+  const coverDelta = sunActive
+    ? (cover === 'hat' ? -hatMax : cover === 'parasol' ? -parasolMax : 0)
+    : 0;
   const modDelta = colorDelta + coverDelta;
 
   const baseSun = d.feelsLikeSun + (tweaks.solarBoost || 0);
@@ -252,7 +258,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
         <div className={`color-toggle ${!sunActive ? 'inactive' : ''}`}>
           <button className={color === 'black' ? 'active' : ''} onClick={() => setColor('black')}>
             <span className="sw" style={{ background: '#161616' }} /> 黒
-            {sunActive && <span className="delta">+5.6°</span>}
+            {sunActive && blackMax > 0 && <span className="delta">+{blackMax.toFixed(1)}°</span>}
           </button>
           <button className={color === 'white' ? 'active' : ''} onClick={() => setColor('white')}>
             <span className="sw" style={{ background: '#f2f0ea', border: '1px solid var(--rule)' }} /> 白
@@ -265,11 +271,11 @@ function HomeM({ inSun, setInSun, tweaks }) {
           </button>
           <button className={cover === 'hat' ? 'active' : ''} onClick={() => setCover('hat')}>
             <HatGlyph /> 帽子
-            {sunActive && <span className="delta">−2°</span>}
+            {sunActive && hatMax > 0 && <span className="delta">−{hatMax.toFixed(1)}°</span>}
           </button>
           <button className={cover === 'parasol' ? 'active' : ''} onClick={() => setCover('parasol')}>
             <ParasolGlyph /> 日傘
-            {sunActive && <span className="delta">−3°</span>}
+            {sunActive && parasolMax > 0 && <span className="delta">−{parasolMax.toFixed(1)}°</span>}
           </button>
         </div>
       </div>
@@ -302,8 +308,8 @@ function HomeM({ inSun, setInSun, tweaks }) {
         <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={+1.4} pos />
         <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={-0.3} neg />
         <FactorRow label="服装" value={tweaks.clothing === 'light' ? 1 : tweaks.clothing === 'medium' ? 2 : 3} max={3} unit="lv" delta={tweaks.clothing === 'light' ? -0.4 : tweaks.clothing === 'heavy' ? +1.1 : +0.2} />
-        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={5.6} unit="°" pos={colorDelta > 0} />
-        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={3} unit="°" neg={coverDelta < 0} />
+        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={Math.max(blackMax, 0.1)} unit="°" pos={colorDelta > 0} />
+        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={Math.max(parasolMax, 0.1)} unit="°" neg={coverDelta < 0} />
       </div>
 
       <div className="section-head">
@@ -659,25 +665,31 @@ function MapM() {
 // ─── COLORS ───
 function ColorsM() {
   const colors = window.APP_DATA.clothingColors;
+  const now = window.APP_DATA.now;
+  const solar = now.solar || 0;
+  const todayDelta = +(solar * 0.007).toFixed(1);
   return (
     <div>
       <div className="c-intro">
         <div className="eyebrow">Clothing · Color & Heat</div>
-        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>5.6°C</span>変わる</h2>
+        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>{todayDelta.toFixed(1)}°C</span>変わる</h2>
         <div className="blurb">
-          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">24.8°C</span>・日射 <span className="mono">780 W/m²</span> では、黒は白より約 <strong>5.6°C</strong> 暑く感じます。
+          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">{now.airTemp.toFixed(1)}°C</span>・日射 <span className="mono">{solar} W/m²</span> では、黒は白より約 <strong>{todayDelta.toFixed(1)}°C</strong> 暑く感じます。
         </div>
       </div>
       <div className="color-grid-m">
-        {colors.map((c, i) => (
-          <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
-            <div className="c-name">{c.name}</div>
-            <div>
-              <div className="c-delta">+{c.deltaC.toFixed(1)}°</div>
-              <div className="c-surface">SURFACE · {c.surface}°C</div>
+        {colors.map((c, i) => {
+          const scaled = +(c.deltaC * solar / 800).toFixed(1);
+          return (
+            <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
+              <div className="c-name">{c.name}</div>
+              <div>
+                <div className="c-delta">+{scaled.toFixed(1)}°</div>
+                <div className="c-surface">SURFACE · {c.surface}°C</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="c-notes">
         <div className="n">
