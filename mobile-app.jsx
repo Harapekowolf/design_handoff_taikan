@@ -145,7 +145,9 @@ function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.
 // ─── HOME ───
 function HomeM({ inSun, setInSun, tweaks }) {
   const d = window.APP_DATA.now;
-  const feels = inSun ? d.feelsLikeSun + (tweaks.solarBoost || 0) : d.feelsLikeShade;
+  const [color, setColor] = React.useState('black');
+  const colorDelta = inSun ? (color === 'white' ? -5.6 : 0) : 0;
+  const feels = (inSun ? d.feelsLikeSun + (tweaks.solarBoost || 0) : d.feelsLikeShade) + colorDelta;
 
   return (
     <div>
@@ -171,6 +173,16 @@ function HomeM({ inSun, setInSun, tweaks }) {
           </button>
           <button className={!inSun ? 'active' : ''} onClick={() => setInSun(false)}>
             <ShadeGlyph /> 日陰
+          </button>
+        </div>
+
+        <div className="color-toggle">
+          <button className={color === 'black' ? 'active' : ''} onClick={() => setColor('black')}>
+            <span className="sw" style={{ background: '#161616' }} /> 黒
+          </button>
+          <button className={color === 'white' ? 'active' : ''} onClick={() => setColor('white')}>
+            <span className="sw" style={{ background: '#f2f0ea', border: '1px solid var(--rule)' }} /> 白
+            {inSun && <span className="delta">−5.6°</span>}
           </button>
         </div>
       </div>
