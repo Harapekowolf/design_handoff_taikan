@@ -115,6 +115,9 @@
       uv: Math.round(cur.uv_index || 0),
       solar: Math.round(cur.shortwave_radiation || 0),
       pressure: Math.round(cur.pressure_msl || 1013),
+      weatherCode: cur.weather_code,
+      cond: wmoToCond(cur.weather_code),
+      condNote: wmoToNote(cur.weather_code),
       sunrise: (day.sunrise[0] || '').slice(11, 16) || '—',
       sunset: (day.sunset[0] || '').slice(11, 16) || '—',
     };
