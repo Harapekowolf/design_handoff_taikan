@@ -15,11 +15,15 @@ function MobileApp() {
 
   React.useEffect(() => {
     const on = () => forceUpdate();
+    window.addEventListener('weather:loading', on);
     window.addEventListener('weather:loaded', on);
     window.addEventListener('weather:updated', on);
+    window.addEventListener('weather:error', on);
     return () => {
+      window.removeEventListener('weather:loading', on);
       window.removeEventListener('weather:loaded', on);
       window.removeEventListener('weather:updated', on);
+      window.removeEventListener('weather:error', on);
     };
   }, []);
 
@@ -82,6 +86,7 @@ function MobileApp() {
     <div className="m-frame">
       <div className="m-app" data-screen-label={`mobile-${screen}`}>
         <MHeader title={screenTitle(screen)} />
+        <WeatherErrorBanner />
         <div className="m-scroll">
           {screens[screen]}
         </div>
@@ -100,13 +105,55 @@ function screenTitle(s) {
 }
 
 function MHeader({ title }) {
+  const ws = window.WEATHER_STATE || {};
+  const updated = ws.lastUpdated
+    ? new Date(ws.lastUpdated).toTimeString().slice(0, 5)
+    : null;
+  const onRefresh = () => {
+    if (ws.loading) return;
+    if (typeof window.refreshWeather === 'function') window.refreshWeather();
+  };
   return (
     <div className="m-header">
       <div className="loc">
         <span className="name">{title}</span>
         <span className="time">{window.APP_DATA.now.timeLabel}</span>
       </div>
-      <span className="brand">taikan.</span>
+      <div className="meta">
+        <span className="brand">taikan.</span>
+        <button
+          type="button"
+          className={`refresh ${ws.loading ? 'loading' : ''} ${ws.error ? 'error' : ''}`}
+          onClick={onRefresh}
+          aria-label="天気を更新"
+          disabled={ws.loading}
+        >
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 4v4h-4"/>
+            <path d="M16 8A6 6 0 104 10"/>
+          </svg>
+          <span>{ws.loading ? '更新中' : (updated ? `${updated} 更新` : '未取得')}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WeatherErrorBanner() {
+  const ws = window.WEATHER_STATE || {};
+  if (!ws.error) return null;
+  const onRetry = () => {
+    if (typeof window.refreshWeather === 'function') window.refreshWeather();
+  };
+  const msg = ws.source === 'dummy'
+    ? '天気データを取得できませんでした（ダミー値を表示中）'
+    : '天気データを更新できませんでした';
+  return (
+    <div className="weather-error">
+      <span>{msg}</span>
+      <button type="button" onClick={onRetry} disabled={ws.loading}>
+        {ws.loading ? '更新中…' : '再試行'}
+      </button>
     </div>
   );
 }
