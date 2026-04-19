@@ -10,7 +10,7 @@
                 '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'];
   const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-  window.WEATHER_STATE = { loading: true, error: null, source: 'dummy' };
+  window.WEATHER_STATE = { loading: true, error: null, source: 'dummy', lastUpdated: null };
 
   function degToJpDir(deg) {
     if (deg == null || isNaN(deg)) return '—';
@@ -187,6 +187,12 @@
   }
 
   async function load() {
+    const prevSource = (window.WEATHER_STATE && window.WEATHER_STATE.source) || 'dummy';
+    window.WEATHER_STATE = {
+      loading: true, error: null, source: prevSource,
+      lastUpdated: window.WEATHER_STATE && window.WEATHER_STATE.lastUpdated,
+    };
+    window.dispatchEvent(new CustomEvent('weather:loading'));
     try {
       const pos = await getPosition();
       const [locName, forecast] = await Promise.all([
@@ -197,6 +203,7 @@
       window.WEATHER_STATE = {
         loading: false, error: null,
         source: pos.fallback ? 'default' : 'gps',
+        lastUpdated: Date.now(),
       };
       window.dispatchEvent(new CustomEvent('weather:loaded'));
       fetchRegions().then(() => {
@@ -204,10 +211,15 @@
       }).catch(() => {});
     } catch (err) {
       console.warn('Weather load failed, using dummy data:', err);
-      window.WEATHER_STATE = { loading: false, error: err.message || 'error', source: 'dummy' };
+      window.WEATHER_STATE = {
+        loading: false, error: err.message || 'error', source: 'dummy',
+        lastUpdated: window.WEATHER_STATE && window.WEATHER_STATE.lastUpdated,
+      };
+      window.dispatchEvent(new CustomEvent('weather:error'));
       window.dispatchEvent(new CustomEvent('weather:loaded'));
     }
   }
 
+  window.refreshWeather = load;
   window.WEATHER_PROMISE = load();
 })();

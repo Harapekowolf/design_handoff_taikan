@@ -1,0 +1,16 @@
+{
+  "name": "体感温度アプリ · taikan.",
+  "short_name": "taikan.",
+  "description": "日向と日陰の体感温度がひと目で分かる、最小限の気象アプリ。",
+  "lang": "ja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f5f0",
+  "theme_color": "#f7f5f0",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
