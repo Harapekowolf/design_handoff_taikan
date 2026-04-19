@@ -195,15 +195,14 @@ function IconMap()     { return <svg {...iprops}><path d="M2.5 5l5-2 5 2 5-2v12l
 function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.9 2.5 10c0 3 1.6 5 4.5 5 1.5 0 2-.8 2-1.8s-.5-1.5.2-2.2c.7-.7 1.5-.5 2.8-.5 2.8 0 5.5-1.2 5.5-4C17.5 4.7 14.1 2.5 10 2.5z"/><circle cx="6.5" cy="8" r="0.8" fill="currentColor"/><circle cx="10" cy="5.5" r="0.8" fill="currentColor"/><circle cx="13.5" cy="7" r="0.8" fill="currentColor"/></svg>; }
 
 // Physics-ish feels-like model for clothing color + cover.
-// Baseline: at wind=2 m/s, RH=50%, medium clothing → 0.007 °C per W/m² (matches feelsLikeSun).
-// Wind cools convectively, humid air hinders sweat evaporation, thick clothes trap heat.
-function sunHeatCoef(wind, rh, thickness) {
+// Baseline: at wind=2 m/s, RH=50% → 0.007 °C per W/m² (matches feelsLikeSun).
+// Wind cools convectively, humid air hinders sweat evaporation.
+function sunHeatCoef(wind, rh) {
   const BASE = 0.007;
   const convMult = (6 + 3.7 * 2) / (6 + 3.7 * Math.max(0, wind));
   const rhMult = 1 + Math.max(0, (rh - 50) / 250);
-  return BASE * convMult * rhMult * thickness;
+  return BASE * convMult * rhMult;
 }
-const THICKNESS_MAP = { light: 0.85, medium: 1.0, heavy: 1.2 };
 const COVER_FRAC = { hat: 0.36, parasol: 0.54 };
 
 // ─── HOME ───
@@ -223,8 +222,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const solar = d.solar || 0;
   const wind = d.windMS || 0;
   const rh = d.humidity || 50;
-  const thickness = THICKNESS_MAP[tweaks.clothing] || 1.0;
-  const coef = sunHeatCoef(wind, rh, thickness);
+  const coef = sunHeatCoef(wind, rh);
   const blackMax = +(solar * coef).toFixed(1);
   const colorDelta = sunActive && color === 'black' ? blackMax : 0;
   const hatMax = +(solar * coef * COVER_FRAC.hat).toFixed(1);
@@ -302,8 +300,6 @@ function HomeM({ inSun, setInSun, tweaks }) {
             風 <span className="mono">{wind.toFixed(1)}m/s</span>
             <span className="sep">·</span>
             湿度 <span className="mono">{rh}%</span>
-            <span className="sep">·</span>
-            服装 <span>{tweaks.clothing === 'light' ? '薄着' : tweaks.clothing === 'heavy' ? '厚着' : '標準'}</span>
           </div>
         )}
       </div>
@@ -697,10 +693,10 @@ function ColorsM() {
   const solar = now.solar || 0;
   const wind = now.windMS || 0;
   const rh = now.humidity || 50;
-  // data.js deltaC values are calibrated for (solar=800, wind=2, rh=50, medium clothing),
+  // data.js deltaC values are calibrated for (solar=800, wind=2, rh=50),
   // so the scaling factor is today's coef×solar normalized by that baseline.
   const BASELINE = 800 * 0.007;
-  const todayCoef = sunHeatCoef(wind, rh, 1.0);
+  const todayCoef = sunHeatCoef(wind, rh);
   const scale = (solar * todayCoef) / BASELINE;
   const todayDelta = +(colors[colors.length - 1].deltaC * scale).toFixed(1);
   return (
