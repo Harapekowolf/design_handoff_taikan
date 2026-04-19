@@ -217,6 +217,36 @@ function windDeltaC(windMS) {
   return -0.70 * (windMS || 0);
 }
 
+// WBGT (暑さ指数) approx: Ono/Tonouchi-ish fit using Ta, RH, solar.
+function wbgtCategory(v) {
+  if (v < 21) return { label: 'ほぼ安全', level: 'safe',   note: '熱中症の危険は少ない' };
+  if (v < 25) return { label: '注意',     level: 'mild',   note: '激しい運動では水分補給を' };
+  if (v < 28) return { label: '警戒',     level: 'warn',   note: '積極的に休息と水分を' };
+  if (v < 31) return { label: '厳重警戒', level: 'strict', note: '外出時は熱中症に注意' };
+  return          { label: '危険',     level: 'danger', note: '外出・運動はなるべく避ける' };
+}
+function WbgtBadge({ temp, rh, solar }) {
+  const raw = 0.735 * temp + 0.0374 * rh + 0.00292 * temp * rh + 0.004 * solar - 4.064;
+  const v = Math.max(0, raw);
+  const { label, level, note } = wbgtCategory(v);
+  return (
+    <div className={`wbgt-badge lv-${level}`}>
+      <div className="wbgt-top">
+        <span className="wbgt-k">暑さ指数 <span className="mono">WBGT</span></span>
+        <span className="wbgt-v mono">{v.toFixed(1)}</span>
+        <span className="wbgt-cat">{label}</span>
+      </div>
+      <div className="wbgt-scale" aria-hidden="true">
+        {[21, 25, 28, 31].map((t, i) => (
+          <span key={i} className="tick" style={{ left: `${Math.min(100, (t / 35) * 100)}%` }}/>
+        ))}
+        <span className="mark" style={{ left: `${Math.min(100, Math.max(0, (v / 35) * 100))}%` }}/>
+      </div>
+      <div className="wbgt-note">{note}</div>
+    </div>
+  );
+}
+
 // ─── HOME ───
 function HomeM({ inSun, setInSun, tweaks }) {
   const d = window.APP_DATA.now;
@@ -281,6 +311,8 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span><span className="k">風</span> <span className="v">{d.windMS}m/s</span></span>
           <span><span className="k">UV</span> <span className="v">{d.uv}</span></span>
         </div>
+
+        <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
 
         {isNight && (
           <div className="night-note">
@@ -517,7 +549,9 @@ function HourlyM() {
 
   const sel = selIdx != null ? hours[selIdx] : null;
   const selX = sel ? x(selIdx) : 0;
-  const labelW = 86, labelH = 50;
+  const hasRain = hours.some(hh => (hh.precipProb || 0) > 0);
+  const selHasRain = sel && ((sel.precipProb || 0) > 0 || (sel.precipMm || 0) > 0);
+  const labelW = 92, labelH = selHasRain ? 62 : 50;
   const labelX = Math.max(padL - 2, Math.min(width - padR - labelW, selX - labelW / 2));
   const labelY = padT + 2;
 
@@ -528,6 +562,7 @@ function HourlyM() {
           <span><span className="swatch sw-sun"></span>日向</span>
           <span><span className="swatch sw-shade"></span>日陰</span>
           <span><span className="swatch sw-air"></span>気温</span>
+          {hasRain && <span><span className="swatch sw-rain"></span>降水</span>}
           <span className="chart-hint">タップで値表示</span>
         </div>
         <svg
@@ -546,6 +581,17 @@ function HourlyM() {
               <text x={padL - 4} y={y(v) + 3} textAnchor="end" fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">{v}°</text>
             </g>
           ))}
+          {hasRain && hours.map((hh, i) => {
+            const p = hh.precipProb || 0;
+            if (p <= 0) return null;
+            const barMax = 22;
+            const barH = (p / 100) * barMax;
+            const step = innerW / (hours.length - 1);
+            const bw = Math.max(3, step * 0.55);
+            const bx = x(i) - bw / 2;
+            const by = padT + innerH - barH;
+            return <rect key={`r${i}`} x={bx} y={by} width={bw} height={barH} fill="#7ba6c9" opacity="0.35"/>;
+          })}
           <line x1={x(nowHour - 6)} x2={x(nowHour - 6)} y1={padT} y2={padT + innerH} stroke="#d94b1a" strokeDasharray="2 2" strokeWidth="0.8"/>
           <text x={x(nowHour - 6) + 3} y={padT + 7} fontSize="7" fill="#d94b1a" fontFamily="JetBrains Mono" letterSpacing="0.08em">NOW</text>
           <path d={mk('air')} fill="none" stroke="#8a8a8a" strokeWidth="0.8" strokeDasharray="2 2"/>
@@ -568,6 +614,9 @@ function HourlyM() {
                 <text x={6} y={23} fontSize="9" fill="#d94b1a" fontFamily="JetBrains Mono">日向 {sel.sun.toFixed(1)}°</text>
                 <text x={6} y={34} fontSize="9" fill="#0f0f0f" fontFamily="JetBrains Mono">日陰 {sel.shade.toFixed(1)}°</text>
                 <text x={6} y={45} fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">気温 {sel.air.toFixed(1)}°</text>
+                {selHasRain && (
+                  <text x={6} y={57} fontSize="8" fill="#7ba6c9" fontFamily="JetBrains Mono">降水 {sel.precipProb || 0}%{sel.precipMm ? ` / ${sel.precipMm.toFixed(1)}mm` : ''}</text>
+                )}
               </g>
             </g>
           )}
