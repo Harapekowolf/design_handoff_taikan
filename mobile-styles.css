@@ -392,6 +392,76 @@ body {
 }
 .night-note + .sun-shade-toggle { margin-top: 8px; }
 
+/* WBGT badge */
+.wbgt-badge {
+  margin-top: 16px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  border-left-width: 3px;
+  border-left-color: var(--ink-5);
+}
+.wbgt-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.wbgt-k {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+  text-transform: uppercase;
+}
+.wbgt-v {
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1;
+}
+.wbgt-cat {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.wbgt-scale {
+  position: relative;
+  height: 3px;
+  background: var(--rule-2);
+  margin-top: 10px;
+}
+.wbgt-scale .tick {
+  position: absolute;
+  top: -1px;
+  width: 1px;
+  height: 5px;
+  background: var(--ink-5);
+}
+.wbgt-scale .mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: currentColor;
+}
+.wbgt-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+.wbgt-badge.lv-safe   { color: var(--ink-4); border-left-color: var(--ink-5); }
+.wbgt-badge.lv-mild   { color: var(--ink-3); border-left-color: var(--ink-4); }
+.wbgt-badge.lv-warn   { color: var(--accent); border-left-color: var(--accent); }
+.wbgt-badge.lv-strict { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.wbgt-badge.lv-danger { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.wbgt-badge.lv-warn   .wbgt-cat,
+.wbgt-badge.lv-strict .wbgt-cat,
+.wbgt-badge.lv-danger .wbgt-cat { color: var(--accent); }
+
 .ss-cards .ss-c .d .mod {
   margin-left: 6px;
   color: var(--accent);
@@ -497,6 +567,7 @@ body {
 .legend .sw-sun { background: var(--accent); }
 .legend .sw-shade { background: var(--ink); }
 .legend .sw-air { border-bottom: 1px dashed var(--ink-4); height: 0; }
+.legend .sw-rain { background: #7ba6c9; opacity: 0.55; }
 .legend .chart-hint {
   margin-left: auto;
   font-family: 'Fraunces', Georgia, serif;

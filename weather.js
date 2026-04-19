@@ -79,7 +79,7 @@
     const url = 'https://api.open-meteo.com/v1/forecast' +
       `?latitude=${lat}&longitude=${lon}` +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,uv_index,shortwave_radiation,weather_code,pressure_msl' +
-      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation' +
+      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation,precipitation_probability,precipitation' +
       '&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,weather_code,sunrise,sunset' +
       '&timezone=auto&forecast_days=7&wind_speed_unit=ms';
     const res = await fetch(url);
@@ -135,6 +135,8 @@
         hum: Math.round(h.relative_humidity_2m[i]),
         wind: +(h.wind_speed_10m[i].toFixed(1)),
         solar: Math.round(solar),
+        precipProb: h.precipitation_probability ? Math.round(h.precipitation_probability[i] || 0) : 0,
+        precipMm: h.precipitation ? +((h.precipitation[i] || 0).toFixed(1)) : 0,
       });
     }
     if (hourlyOut.length >= 4) window.APP_DATA.hourly = hourlyOut;
