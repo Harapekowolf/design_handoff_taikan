@@ -17,6 +17,9 @@ window.APP_DATA = {
     weatherCode: 0,
     cond: 'sun',
     condNote: '晴れ',
+    aqi: 38,                // European AQI 0–100
+    pm25: 9.2,              // PM2.5 µg/m³
+    pm10: 18.4,             // PM10 µg/m³
     sunrise: '05:02',
     sunset: '18:14',
   },
