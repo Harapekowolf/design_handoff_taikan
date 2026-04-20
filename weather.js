@@ -163,6 +163,24 @@
     });
   }
 
+  async function fetchAirQuality(lat, lon) {
+    try {
+      const url = 'https://air-quality-api.open-meteo.com/v1/air-quality' +
+        `?latitude=${lat}&longitude=${lon}` +
+        '&current=pm2_5,pm10,european_aqi' +
+        '&timezone=auto';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('aqi ' + res.status);
+      const d = await res.json();
+      const c = d.current || {};
+      window.APP_DATA.now.aqi = c.european_aqi != null ? Math.round(c.european_aqi) : null;
+      window.APP_DATA.now.pm25 = c.pm2_5 != null ? +c.pm2_5.toFixed(1) : null;
+      window.APP_DATA.now.pm10 = c.pm10 != null ? +c.pm10.toFixed(1) : null;
+    } catch (err) {
+      // Leave any existing (dummy) values in place.
+    }
+  }
+
   async function fetchRegions() {
     const regions = window.APP_DATA.regions;
     const out = await Promise.all(regions.map(async (r) => {
@@ -211,6 +229,9 @@
         lastUpdated: Date.now(),
       };
       window.dispatchEvent(new CustomEvent('weather:loaded'));
+      fetchAirQuality(pos.lat, pos.lon).then(() => {
+        window.dispatchEvent(new CustomEvent('weather:updated'));
+      }).catch(() => {});
       fetchRegions().then(() => {
         window.dispatchEvent(new CustomEvent('weather:updated'));
       }).catch(() => {});

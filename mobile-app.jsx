@@ -9,7 +9,63 @@ function MobileApp() {
   const [inSun, setInSun] = React.useState(
     () => localStorage.getItem('taikan.m.inSun') !== '0'
   );
+  const [heatAlerts, setHeatAlerts] = React.useState(
+    () => localStorage.getItem('taikan.m.heatAlerts') === '1'
+  );
+  const [notifState, setNotifState] = React.useState(() =>
+    (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
+  );
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+
+  React.useEffect(() => {
+    localStorage.setItem('taikan.m.heatAlerts', heatAlerts ? '1' : '0');
+  }, [heatAlerts]);
+
+  // Fire a local heat-stroke notification when WBGT ≥ 28, at most once per day.
+  React.useEffect(() => {
+    if (!heatAlerts) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const check = () => {
+      const d = window.APP_DATA && window.APP_DATA.now;
+      if (!d) return;
+      const v = wbgtValue(d.airTemp, d.humidity, d.solar || 0);
+      if (v < 28) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const lastKey = 'taikan.m.heatAlertedOn';
+      if (localStorage.getItem(lastKey) === today) return;
+      localStorage.setItem(lastKey, today);
+      const { label } = wbgtCategory(v);
+      const body = `${d.location || '現在地'} · WBGT ${v.toFixed(1)} (${label}) · 水分と休息を意識しましょう。`;
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification('熱中症注意 · taikan.', {
+            body, tag: 'heat-alert', icon: 'icon-192.png', badge: 'icon-192.png',
+          }).catch(() => new Notification('熱中症注意 · taikan.', { body }));
+        }).catch(() => new Notification('熱中症注意 · taikan.', { body }));
+      } else {
+        new Notification('熱中症注意 · taikan.', { body });
+      }
+    };
+    window.addEventListener('weather:loaded', check);
+    check();
+    return () => window.removeEventListener('weather:loaded', check);
+  }, [heatAlerts]);
+
+  const requestAlerts = async () => {
+    if (typeof Notification === 'undefined') { setNotifState('unsupported'); return; }
+    if (Notification.permission === 'granted') {
+      setNotifState('granted');
+      setHeatAlerts(true);
+      return;
+    }
+    try {
+      const p = await Notification.requestPermission();
+      setNotifState(p);
+      if (p === 'granted') setHeatAlerts(true);
+    } catch (_) {
+      setNotifState('denied');
+    }
+  };
 
   React.useEffect(() => {
     localStorage.setItem('taikan.m.screen', screen);
@@ -97,7 +153,15 @@ function MobileApp() {
         </div>
         <MTabBar screen={screen} setScreen={setScreen} />
       </div>
-      <TweaksM open={tweaksOpen} tweaks={tweaks} setTweaks={setTweaks} />
+      <TweaksM
+        open={tweaksOpen}
+        tweaks={tweaks}
+        setTweaks={setTweaks}
+        heatAlerts={heatAlerts}
+        setHeatAlerts={setHeatAlerts}
+        notifState={notifState}
+        requestAlerts={requestAlerts}
+      />
     </div>
   );
 }
@@ -218,6 +282,10 @@ function windDeltaC(windMS) {
 }
 
 // WBGT (暑さ指数) approx: Ono/Tonouchi-ish fit using Ta, RH, solar.
+function wbgtValue(temp, rh, solar) {
+  const raw = 0.735 * temp + 0.0374 * rh + 0.00292 * temp * rh + 0.004 * (solar || 0) - 4.064;
+  return Math.max(0, raw);
+}
 function wbgtCategory(v) {
   if (v < 21) return { label: 'ほぼ安全', level: 'safe',   note: '熱中症の危険は少ない' };
   if (v < 25) return { label: '注意',     level: 'mild',   note: '激しい運動では水分補給を' };
@@ -226,8 +294,7 @@ function wbgtCategory(v) {
   return          { label: '危険',     level: 'danger', note: '外出・運動はなるべく避ける' };
 }
 function WbgtBadge({ temp, rh, solar }) {
-  const raw = 0.735 * temp + 0.0374 * rh + 0.00292 * temp * rh + 0.004 * solar - 4.064;
-  const v = Math.max(0, raw);
+  const v = wbgtValue(temp, rh, solar);
   const { label, level, note } = wbgtCategory(v);
   return (
     <div className={`wbgt-badge lv-${level}`}>
@@ -243,6 +310,35 @@ function WbgtBadge({ temp, rh, solar }) {
         <span className="mark" style={{ left: `${Math.min(100, Math.max(0, (v / 35) * 100))}%` }}/>
       </div>
       <div className="wbgt-note">{note}</div>
+    </div>
+  );
+}
+
+// Air-quality categorization (PM2.5 + European AQI).
+function pm25Category(pm) {
+  if (pm == null) return null;
+  if (pm <= 12)  return { label: '良好',     level: 'safe' };
+  if (pm <= 25)  return { label: '普通',     level: 'mild' };
+  if (pm <= 50)  return { label: '注意',     level: 'warn' };
+  if (pm <= 100) return { label: '悪い',     level: 'strict' };
+  return             { label: '非常に悪い', level: 'danger' };
+}
+
+function AirQualityCard({ aqi, pm25, pm10 }) {
+  if (aqi == null && pm25 == null) return null;
+  const cat = pm25Category(pm25) || { label: '—', level: 'safe' };
+  const aqiLabel = aqi == null ? '—' : aqi;
+  return (
+    <div className={`aq-card lv-${cat.level}`}>
+      <div className="aq-top">
+        <span className="aq-k">大気の質 <span className="mono">AQI</span></span>
+        <span className="aq-v mono">{aqiLabel}</span>
+        <span className="aq-cat">{cat.label}</span>
+      </div>
+      <div className="aq-row">
+        {pm25 != null && <span><span className="k">PM2.5</span><span className="v">{pm25.toFixed(1)} µg/m³</span></span>}
+        {pm10 != null && <span><span className="k">PM10</span><span className="v">{pm10.toFixed(1)} µg/m³</span></span>}
+      </div>
     </div>
   );
 }
@@ -313,6 +409,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
         </div>
 
         <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
+        <AirQualityCard aqi={d.aqi} pm25={d.pm25} pm10={d.pm10} />
 
         {isNight && (
           <div className="night-note">
@@ -637,6 +734,8 @@ function HourlyM() {
         ))}
       </div>
 
+      <WbgtTimeline hours={hours} nowHour={nowHour} />
+
       <div className="section-head">
         <h2>今日のポイント</h2>
       </div>
@@ -658,6 +757,54 @@ function HourlyM() {
         </div>
       </div>
     </div>
+  );
+}
+
+function WbgtTimeline({ hours, nowHour }) {
+  const rows = hours.map(h => {
+    const v = wbgtValue(h.air, h.hum, h.solar);
+    return { h: h.h, v, cat: wbgtCategory(v) };
+  });
+  const peak = rows.reduce((a, b) => (b.v > a.v ? b : a), rows[0]);
+  const warnStart = rows.find(r => r.v >= 28);
+  const warnEnd = [...rows].reverse().find(r => r.v >= 28);
+  let headline;
+  if (warnStart && warnEnd) {
+    headline = warnStart.h === warnEnd.h
+      ? `${String(warnStart.h).padStart(2, '0')}:00 に警戒レベル (WBGT ${peak.v.toFixed(1)})`
+      : `${String(warnStart.h).padStart(2, '0')}:00 – ${String(warnEnd.h + 1).padStart(2, '0')}:00 が警戒以上 (ピーク ${peak.v.toFixed(1)})`;
+  } else {
+    headline = `ピーク ${String(peak.h).padStart(2, '0')}:00 · WBGT ${peak.v.toFixed(1)} (${peak.cat.label})`;
+  }
+  return (
+    <>
+      <div className="section-head">
+        <h2>熱中症リスク</h2>
+        <span className="link">WBGT / 時間帯</span>
+      </div>
+      <div className="wbgt-timeline">
+        <div className="wbgt-row">
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              className={`wbgt-cell lv-${r.cat.level} ${r.h === nowHour ? 'now' : ''}`}
+              title={`${String(r.h).padStart(2, '0')}:00 · WBGT ${r.v.toFixed(1)} (${r.cat.label})`}
+            >
+              <span className="hh">{String(r.h).padStart(2, '0')}</span>
+              <span className="wv mono">{r.v.toFixed(0)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="wbgt-headline">{headline}</div>
+        <div className="wbgt-legend">
+          <span><span className="sw lv-safe" />ほぼ安全</span>
+          <span><span className="sw lv-mild" />注意</span>
+          <span><span className="sw lv-warn" />警戒</span>
+          <span><span className="sw lv-strict" />厳重警戒</span>
+          <span><span className="sw lv-danger" />危険</span>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -915,8 +1062,18 @@ const DEFAULT_M_TWEAKS = /*EDITMODE-BEGIN*/{
   "solarBoost": 0
 }/*EDITMODE-END*/;
 
-function TweaksM({ open, tweaks, setTweaks }) {
+function TweaksM({ open, tweaks, setTweaks, heatAlerts, setHeatAlerts, notifState, requestAlerts }) {
   if (!open) return null;
+  const canToggle = notifState === 'granted';
+  const statusMsg = notifState === 'unsupported'
+    ? 'この環境では通知に対応していません'
+    : notifState === 'denied'
+      ? 'ブラウザ設定で通知が拒否されています'
+      : notifState === 'default'
+        ? '初回は [許可する] で通知を有効化'
+        : heatAlerts
+          ? `WBGT ≥ 28 で1日1回お知らせ`
+          : 'オフ · 必要な時だけお知らせ';
   return (
     <div style={{
       position: 'fixed', bottom: 20, right: 20, width: 240,
@@ -943,6 +1100,22 @@ function TweaksM({ open, tweaks, setTweaks }) {
           onChange={e => setTweaks({ ...tweaks, solarBoost: parseFloat(e.target.value) })}
           style={{ width: 120, accentColor: '#d94b1a' }} />
         <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>{tweaks.solarBoost > 0 ? '+' : ''}{tweaks.solarBoost}°</span>
+      </div>
+      <div style={{ borderTop: '1px solid #333', margin: '10px 0 6px' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <label style={{ color: '#b8b8b8', fontSize: 11 }}>熱中症アラート</label>
+        {canToggle ? (
+          <button type="button" style={tBtn} onClick={() => setHeatAlerts(!heatAlerts)}>
+            {heatAlerts ? 'オン' : 'オフ'}
+          </button>
+        ) : (
+          <button type="button" style={tBtn} onClick={requestAlerts} disabled={notifState === 'unsupported' || notifState === 'denied'}>
+            許可する
+          </button>
+        )}
+      </div>
+      <div className={`alert-status ${notifState === 'denied' || notifState === 'unsupported' ? 'err' : ''}`}>
+        {statusMsg}
       </div>
     </div>
   );

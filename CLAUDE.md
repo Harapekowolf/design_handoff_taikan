@@ -46,6 +46,7 @@ The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` t
 
 - `data.js` defines `window.APP_DATA` with dummy values (Tokyo, 2026-04-18). Shape: `{ now, hourly[], weekly[], regions[], outfit, clothingColors, materials }`. Type sketches are in `README.md`.
   - `now` also carries `weatherCode` + `cond` (`'sun' | 'partly' | 'cloud' | 'rain'`) + `condNote` so UI copy can branch on condition.
+  - `now` also carries `aqi` (European AQI 0–100), `pm25`, `pm10` for the `AirQualityCard` on Home.
   - `hourly[]` entries include `precipProb` (%) and `precipMm` so the Hourly chart can overlay a rain layer.
 - `weather.js` (mobile only, loaded by `index.html`) is an IIFE that:
   1. Requests geolocation (falls back to Tokyo if denied).
@@ -54,6 +55,7 @@ The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` t
   4. Computes `feelsLikeSun = apparent_temperature + shortwave_radiation × 0.007`.
   5. Mutates `window.APP_DATA` in place and dispatches `weather:loaded` / `weather:updated` events.
   6. Also per-region fetches for the map screen.
+  7. Fetches air quality (PM2.5 / PM10 / European AQI) from `air-quality-api.open-meteo.com` and re-dispatches `weather:updated` on completion. Failure is silent — existing dummy values stay put.
 - Components read `window.APP_DATA` directly on render (no context/store). `MobileApp` subscribes to the `weather:*` events and force-updates via `useReducer`.
 
 When editing data-driven logic, remember that `APP_DATA` is mutated after mount — do not cache derived values outside of render. **Never hardcode numeric copy** (e.g. "+5.2°", "最大 +6.3°C", "5°C以上違う") — derive those strings from `APP_DATA` on render.
@@ -85,7 +87,8 @@ This is **prototype-only plumbing** for the handoff environment and should be dr
   - `humidityDeltaC(t, rh) = 0.33 · (e(T,RH) − e(T,50))` — humidity's departure from the RH=50% baseline.
   - `windDeltaC(windMS) = −0.70 · windMS` — wind's cooling contribution.
   These power the 日射 / 湿度 / 風速 rows in the "体感の内訳" section.
-- **WBGT** (`WbgtBadge`) uses an Ono/Tonouchi-style fit: `0.735T + 0.0374RH + 0.00292·T·RH + 0.004·solar − 4.064`, mapped to the 環境省 5 categories (`ほぼ安全 / 注意 / 警戒 / 厳重警戒 / 危険`).
+- **WBGT** (`wbgtValue` + `wbgtCategory`) uses an Ono/Tonouchi-style fit: `0.735T + 0.0374RH + 0.00292·T·RH + 0.004·solar − 4.064`, mapped to the 環境省 5 categories (`ほぼ安全 / 注意 / 警戒 / 厳重警戒 / 危険`). `WbgtBadge` renders the current value on Home; `WbgtTimeline` on Hourly renders a ribbon of 16 cells (06–21 JST), highlights the current hour, and surfaces the peak/警戒-window headline.
+- **Air quality** (`pm25Category` + `AirQualityCard`) categorizes PM2.5 (µg/m³) into 良好/普通/注意/悪い/非常に悪い using WHO-leaning cutoffs (12 / 25 / 50 / 100), and reuses the WBGT color ramp (`.lv-safe..danger`).
 - **Color delta** in `ColorsM` scales `clothingColors[].deltaC` by `(solar · sunHeatCoef) / (800 · 0.007)` — the `data.js` values are calibrated for the reference condition `(solar=800, wind=2, RH=50)`.
 
 ### Theming
