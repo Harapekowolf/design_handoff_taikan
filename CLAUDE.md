@@ -81,7 +81,7 @@ This is **prototype-only plumbing** for the handoff environment and should be dr
 `mobile-app.jsx` contains a small set of physics helpers that drive the "feels-like" numbers, clothing color/cover deltas, factor-row contributions, WBGT badge, and hourly insights. Keep these in sync when tuning copy or adding UI:
 
 - **`sunHeatCoef(wind, rh)`** — °C per W/m² of solar radiation. Calibrated so that `wind=2 m/s, RH=50%` returns `0.007` (matching `feelsLikeSun`). Wind reduces the coefficient (convective cooling); humidity above 50% raises it (hindered evaporation).
-- **Cover fractions** `COVER_FRAC = { hat: 0.36, parasol: 0.54 }` — what share of the sun-only delta a hat/parasol neutralizes.
+- **Cover fraction** `COVER_FRAC = { parasol: 0.80 }` — share of the sun-only delta a parasol neutralizes (UV-cut parasols block ~80% of direct shortwave per 環境省 field tests).
 - **JMA apparent-temperature decomposition** — `AT = T + 0.33·e − 0.70·WS − 4.00`:
   - `vaporPressureHpa(t, rh)` (Tetens).
   - `humidityDeltaC(t, rh) = 0.33 · (e(T,RH) − e(T,50))` — humidity's departure from the RH=50% baseline.

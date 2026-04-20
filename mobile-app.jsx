@@ -267,7 +267,7 @@ function sunHeatCoef(wind, rh) {
   const rhMult = 1 + Math.max(0, (rh - 50) / 250);
   return BASE * convMult * rhMult;
 }
-const COVER_FRAC = { hat: 0.36, parasol: 0.54 };
+const COVER_FRAC = { parasol: 0.80 };
 
 // JMA-style apparent-temperature decomposition (AT = T + 0.33·e − 0.70·WS − 4).
 // Show each factor's departure from the neutral baseline (RH 50%, WS 0).
@@ -349,9 +349,10 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const [color, setColor] = React.useState(
     () => localStorage.getItem('taikan.m.color') || 'black'
   );
-  const [cover, setCover] = React.useState(
-    () => localStorage.getItem('taikan.m.cover') || 'none'
-  );
+  const [cover, setCover] = React.useState(() => {
+    const v = localStorage.getItem('taikan.m.cover');
+    return v === 'parasol' ? 'parasol' : 'none';
+  });
   React.useEffect(() => localStorage.setItem('taikan.m.color', color), [color]);
   React.useEffect(() => localStorage.setItem('taikan.m.cover', cover), [cover]);
 
@@ -363,11 +364,8 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const coef = sunHeatCoef(wind, rh);
   const blackMax = +(solar * coef).toFixed(1);
   const colorDelta = sunActive && color === 'black' ? blackMax : 0;
-  const hatMax = +(solar * coef * COVER_FRAC.hat).toFixed(1);
   const parasolMax = +(solar * coef * COVER_FRAC.parasol).toFixed(1);
-  const coverDelta = sunActive
-    ? (cover === 'hat' ? -hatMax : cover === 'parasol' ? -parasolMax : 0)
-    : 0;
+  const coverDelta = sunActive && cover === 'parasol' ? -parasolMax : 0;
   const modDelta = colorDelta + coverDelta;
 
   const baseSun = d.feelsLikeSun + (tweaks.solarBoost || 0);
@@ -388,7 +386,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
         : inSun
           ? (solarDelta >= 5 ? '日差しが強く、体は夏日のよう。' : '日差しで気温より少し暑く感じます。')
           : '日陰では過ごしやすい陽気。';
-  const advice = homeAdvice(d, solarDelta, humDelta, windDelta, isNight, hatMax);
+  const advice = homeAdvice(d, solarDelta, humDelta, windDelta, isNight, parasolMax);
 
   return (
     <div>
@@ -439,10 +437,6 @@ function HomeM({ inSun, setInSun, tweaks }) {
         <div className={`cover-toggle ${!sunActive ? 'inactive' : ''}`}>
           <button className={cover === 'none' ? 'active' : ''} onClick={() => setCover('none')}>
             <CoverNoneGlyph /> なし
-          </button>
-          <button className={cover === 'hat' ? 'active' : ''} onClick={() => setCover('hat')}>
-            <HatGlyph /> 帽子
-            {sunActive && hatMax > 0 && <span className="delta">−{hatMax.toFixed(1)}°</span>}
           </button>
           <button className={cover === 'parasol' ? 'active' : ''} onClick={() => setCover('parasol')}>
             <ParasolGlyph /> 日傘
@@ -505,7 +499,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
   );
 }
 
-function homeAdvice(d, solarDelta, humDelta, windDelta, isNight, hatMax) {
+function homeAdvice(d, solarDelta, humDelta, windDelta, isNight, parasolMax) {
   if (isNight) {
     return {
       t: '日没後は気温と体感がほぼ一致',
@@ -521,7 +515,7 @@ function homeAdvice(d, solarDelta, humDelta, windDelta, isNight, hatMax) {
   if (solarDelta >= 5) {
     return {
       t: `日向は${d.feelsLikeSun.toFixed(0)}°、日陰は${d.feelsLikeShade.toFixed(0)}°`,
-      d: `日差しで体感は気温+${solarDelta.toFixed(1)}°。帽子で約${hatMax.toFixed(1)}°下がります。`,
+      d: `日差しで体感は気温+${solarDelta.toFixed(1)}°。日傘で約${parasolMax.toFixed(1)}°下がります。`,
     };
   }
   if (humDelta >= 1.5) {
@@ -577,14 +571,6 @@ function CoverNoneGlyph() {
     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
       <circle cx="10" cy="10" r="6"/>
       <line x1="6" y1="14" x2="14" y2="6"/>
-    </svg>
-  );
-}
-function HatGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14 Q10 6 16 14"/>
-      <line x1="2.5" y1="14" x2="17.5" y2="14"/>
     </svg>
   );
 }
@@ -816,10 +802,10 @@ function hourlyInsights(hours, now) {
   });
   const peakH = hours[peakI].h;
   const peakEnd = Math.min(peakH + 1, 23);
-  const hatCool = +(peakDiff * COVER_FRAC.hat).toFixed(1);
+  const parasolCool = +(peakDiff * COVER_FRAC.parasol).toFixed(1);
   const peak = peakDiff > 0 ? {
     t: `${String(peakH).padStart(2, '0')}:00 – ${String(peakEnd).padStart(2, '0')}:00`,
-    d: `日向と日陰で最大 +${peakDiff.toFixed(1)}°C の差。帽子で体感は約${hatCool.toFixed(1)}°C下がります。`,
+    d: `日向と日陰で最大 +${peakDiff.toFixed(1)}°C の差。日傘で体感は約${parasolCool.toFixed(1)}°C下がります。`,
   } : {
     t: '日差しの弱い一日',
     d: '日向と日陰の体感差は小さく、天気は穏やかです。',
@@ -891,7 +877,7 @@ function WeeklyM() {
         火曜・水曜にぐっと冷え込みますが、金曜からは再び初夏の陽気。
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.7 }}>
-        日中の気温と体感の差が大きい日が続きます。屋外に長時間いる場合は帽子・水分を。
+        日中の気温と体感の差が大きい日が続きます。屋外に長時間いる場合は日傘・水分を。
       </div>
     </div>
   );
