@@ -80,8 +80,9 @@ This is **prototype-only plumbing** for the handoff environment and should be dr
 
 `mobile-app.jsx` contains a small set of physics helpers that drive the "feels-like" numbers, clothing color/cover deltas, factor-row contributions, WBGT badge, and hourly insights. Keep these in sync when tuning copy or adding UI:
 
-- **`sunHeatCoef(wind, rh)`** — °C per W/m² of solar radiation. Calibrated so that `wind=2 m/s, RH=50%` returns `0.007` (matching `feelsLikeSun`). Wind reduces the coefficient (convective cooling); humidity above 50% raises it (hindered evaporation).
+- **`sunHeatCoef(wind, rh)`** — °C per W/m² of solar radiation. Calibrated so that `wind=2 m/s, RH=50%` returns `0.007` (matching `feelsLikeSun`). Wind reduces the coefficient (convective cooling); humidity above 50% raises it (hindered evaporation). Used by `ColorsM` to scale clothing-color deltas.
 - **Cover fraction** `COVER_FRAC = { parasol: 0.80 }` — share of the sun-only delta a parasol neutralizes (UV-cut parasols block ~80% of direct shortwave per 環境省 field tests).
+- **HomeM sun/shade invariant** — color (`blackMax`) and cover (`parasolMax`) effects scale off the actual API sun-shade gap (`feelsLikeSun − feelsLikeShade`), not `solar × sunHeatCoef`. This guarantees that a parasol can never cool below the shade value and a negative `solarBoost` can't invert sun and shade, even in humid/still conditions where `sunHeatCoef` exceeds the fixed `0.007` baked into `weather.js`.
 - **JMA apparent-temperature decomposition** — `AT = T + 0.33·e − 0.70·WS − 4.00`:
   - `vaporPressureHpa(t, rh)` (Tetens).
   - `humidityDeltaC(t, rh) = 0.33 · (e(T,RH) − e(T,50))` — humidity's departure from the RH=50% baseline.
