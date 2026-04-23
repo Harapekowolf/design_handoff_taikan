@@ -361,14 +361,19 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const solar = d.solar || 0;
   const wind = d.windMS || 0;
   const rh = d.humidity || 50;
-  const coef = sunHeatCoef(wind, rh);
-  const blackMax = +(solar * coef).toFixed(1);
+  // Scale clothing-color / cover effects by the ACTUAL sun-shade gap from
+  // the API (not an independently modelled solar×coef figure) so a parasol
+  // can never cool below the shade value regardless of wind/humidity or the
+  // solarBoost slider. Clamp at 0 so boost<0 can't invert sun and shade.
+  const rawSunDelta = Math.max(0, d.feelsLikeSun - d.feelsLikeShade);
+  const boostedSunDelta = Math.max(0, rawSunDelta + (tweaks.solarBoost || 0));
+  const blackMax = +boostedSunDelta.toFixed(1);
   const colorDelta = sunActive && color === 'black' ? blackMax : 0;
-  const parasolMax = +(solar * coef * COVER_FRAC.parasol).toFixed(1);
+  const parasolMax = +(boostedSunDelta * COVER_FRAC.parasol).toFixed(1);
   const coverDelta = sunActive && cover === 'parasol' ? -parasolMax : 0;
   const modDelta = colorDelta + coverDelta;
 
-  const baseSun = d.feelsLikeSun + (tweaks.solarBoost || 0);
+  const baseSun = d.feelsLikeShade + boostedSunDelta;
   const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
   const sunCardVal = baseSun + modDelta;
 
