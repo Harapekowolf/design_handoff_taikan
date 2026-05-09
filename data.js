@@ -20,6 +20,7 @@ window.APP_DATA = {
     aqi: 38,                // European AQI 0–100
     pm25: 9.2,              // PM2.5 µg/m³
     pm10: 18.4,             // PM10 µg/m³
+    groundTemp: 28.4,       // soil/grass surface °C (Open-Meteo soil_temperature_0cm)
     sunrise: '05:02',
     sunset: '18:14',
   },
