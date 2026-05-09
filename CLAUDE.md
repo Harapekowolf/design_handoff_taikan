@@ -47,6 +47,7 @@ The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` t
 - `data.js` defines `window.APP_DATA` with dummy values (Tokyo, 2026-04-18). Shape: `{ now, hourly[], weekly[], regions[], outfit, clothingColors, materials }`. Type sketches are in `README.md`.
   - `now` also carries `weatherCode` + `cond` (`'sun' | 'partly' | 'cloud' | 'rain'`) + `condNote` so UI copy can branch on condition.
   - `now` also carries `aqi` (European AQI 0–100), `pm25`, `pm10` for the `AirQualityCard` on Home.
+  - `now` also carries `groundTemp` (Open-Meteo `soil_temperature_0cm`, °C) used by `PetGroundCard` for the soil/grass row.
   - `hourly[]` entries include `precipProb` (%) and `precipMm` so the Hourly chart can overlay a rain layer.
 - `weather.js` (mobile only, loaded by `index.html`) is an IIFE that:
   1. Requests geolocation (falls back to Tokyo if denied).
@@ -90,6 +91,7 @@ This is **prototype-only plumbing** for the handoff environment and should be dr
   These power the 日射 / 湿度 / 風速 rows in the "体感の内訳" section.
 - **WBGT** (`wbgtValue` + `wbgtCategory`) uses an Ono/Tonouchi-style fit: `0.735T + 0.0374RH + 0.00292·T·RH + 0.004·solar − 4.064`, mapped to the 環境省 5 categories (`ほぼ安全 / 注意 / 警戒 / 厳重警戒 / 危険`). `WbgtBadge` renders the current value on Home; `WbgtTimeline` on Hourly renders a ribbon of 16 cells (06–21 JST), highlights the current hour, and surfaces the peak/警戒-window headline.
 - **Air quality** (`pm25Category` + `AirQualityCard`) categorizes PM2.5 (µg/m³) into 良好/普通/注意/悪い/非常に悪い using WHO-leaning cutoffs (12 / 25 / 50 / 100), and reuses the WBGT color ramp (`.lv-safe..danger`).
+- **Pet ground temperature** (`pavementTemp` + `pawSafetyCategory` + `PetGroundCard`) estimates surface temperatures for dog-paw safety: `T_asphalt = T_air + 0.045·G`, `T_concrete = T_air + 0.025·G`, plus the API's `soil_temperature_0cm` for grass/soil. Categorized off the asphalt value into 安全/普通/注意/警戒/危険 (50°C "5-second rule" threshold) plus a sub-zero 凍結注意 case for winter.
 - **Color delta** in `ColorsM` scales `clothingColors[].deltaC` by `(solar · sunHeatCoef) / (800 · 0.007)` — the `data.js` values are calibrated for the reference condition `(solar=800, wind=2, RH=50)`.
 
 ### Theming

@@ -597,6 +597,59 @@ body {
 .aq-card.lv-strict .aq-cat,
 .aq-card.lv-danger .aq-cat { color: var(--accent); }
 
+/* Pet (dog paw) ground-temperature card */
+.pet-card {
+  margin-top: 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  border-left-width: 3px;
+  border-left-color: var(--ink-5);
+}
+.pet-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.pet-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+  text-transform: uppercase;
+}
+.pet-cat {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.pet-rows {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+.pet-row { display: flex; justify-content: space-between; }
+.pet-row .k { color: var(--ink-3); letter-spacing: 0.04em; }
+.pet-row .v { color: var(--ink); }
+.pet-note {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+.pet-card.lv-warn   { color: var(--accent); border-left-color: var(--accent); }
+.pet-card.lv-strict { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.pet-card.lv-danger { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.pet-card.lv-warn .pet-cat,
+.pet-card.lv-strict .pet-cat,
+.pet-card.lv-danger .pet-cat { color: var(--accent); }
+
 /* Heat-alert toggle in Tweaks panel */
 .alert-status {
   margin-top: 8px;

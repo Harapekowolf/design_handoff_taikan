@@ -78,7 +78,7 @@
   async function fetchForecast(lat, lon) {
     const url = 'https://api.open-meteo.com/v1/forecast' +
       `?latitude=${lat}&longitude=${lon}` +
-      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,uv_index,shortwave_radiation,weather_code,pressure_msl' +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,uv_index,shortwave_radiation,weather_code,pressure_msl,soil_temperature_0cm' +
       '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation,precipitation_probability,precipitation' +
       '&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,weather_code,sunrise,sunset' +
       '&timezone=auto&forecast_days=7&wind_speed_unit=ms';
@@ -118,6 +118,7 @@
       weatherCode: cur.weather_code,
       cond: wmoToCond(cur.weather_code),
       condNote: wmoToNote(cur.weather_code),
+      groundTemp: cur.soil_temperature_0cm != null ? +cur.soil_temperature_0cm.toFixed(1) : null,
       sunrise: (day.sunrise[0] || '').slice(11, 16) || '—',
       sunset: (day.sunset[0] || '').slice(11, 16) || '—',
     };

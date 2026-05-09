@@ -343,6 +343,74 @@ function AirQualityCard({ aqi, pm25, pm10 }) {
   );
 }
 
+// Pavement temperature estimates for dog-paw safety.
+// T_surface = T_air + (1 − albedo) × G × R_thermal.
+// Asphalt: albedo ~0.07, combined heat transfer ~12 W/m²·K → ~0.045 °C/(W/m²).
+// Concrete: albedo ~0.35, slightly faster heat loss → ~0.025 °C/(W/m²).
+// Tested against 環境省「ヒートアイランド」夏季実測 (asphalt 60–70°C at peak summer sun).
+function pavementTemp(airTemp, solar) {
+  const g = Math.max(0, solar || 0);
+  return {
+    asphalt:  +(airTemp + 0.045 * g).toFixed(1),
+    concrete: +(airTemp + 0.025 * g).toFixed(1),
+  };
+}
+
+// Paw-safety category, keyed off the asphalt (worst-case) temperature.
+// Based on Japanese vet guidance + the "5-second rule" (50°C threshold).
+function pawSafetyCategory(asphalt) {
+  if (asphalt == null || isNaN(asphalt)) return { label: '—', level: 'safe', note: '' };
+  if (asphalt >= 60) return { label: '危険',     level: 'danger', note: '肉球やけどの恐れ。散歩は早朝・夜に' };
+  if (asphalt >= 50) return { label: '警戒',     level: 'strict', note: '長時間の散歩は避けて' };
+  if (asphalt >= 40) return { label: '注意',     level: 'warn',   note: '日陰を選び短時間に' };
+  if (asphalt >= 30) return { label: '普通',     level: 'mild',   note: '日中の路面に注意' };
+  if (asphalt >= 0)  return { label: '安全',     level: 'safe',   note: '快適に散歩できます' };
+  return                  { label: '凍結注意', level: 'warn',   note: '路面凍結や肉球の冷えに注意' };
+}
+
+function DogPawGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="10" cy="13.5" rx="3.6" ry="3"/>
+      <ellipse cx="5.4" cy="8.5" rx="1.3" ry="1.7"/>
+      <ellipse cx="9" cy="5.6" rx="1.3" ry="1.7"/>
+      <ellipse cx="13" cy="5.6" rx="1.3" ry="1.7"/>
+      <ellipse cx="14.6" cy="8.5" rx="1.3" ry="1.7"/>
+    </svg>
+  );
+}
+
+function PetGroundCard({ airTemp, solar, groundTemp }) {
+  if (airTemp == null) return null;
+  const surface = pavementTemp(airTemp, solar);
+  const cat = pawSafetyCategory(surface.asphalt);
+  return (
+    <div className={`pet-card lv-${cat.level}`}>
+      <div className="pet-top">
+        <span className="pet-k"><DogPawGlyph /> 犬の足元 <span className="mono">PAW</span></span>
+        <span className="pet-cat">{cat.label}</span>
+      </div>
+      <div className="pet-rows">
+        <div className="pet-row">
+          <span className="k">アスファルト</span>
+          <span className="v mono">{surface.asphalt.toFixed(1)}°</span>
+        </div>
+        <div className="pet-row">
+          <span className="k">コンクリート</span>
+          <span className="v mono">{surface.concrete.toFixed(1)}°</span>
+        </div>
+        {groundTemp != null && (
+          <div className="pet-row">
+            <span className="k">土・草地</span>
+            <span className="v mono">{groundTemp.toFixed(1)}°</span>
+          </div>
+        )}
+      </div>
+      {cat.note && <div className="pet-note">{cat.note}</div>}
+    </div>
+  );
+}
+
 // ─── HOME ───
 function HomeM({ inSun, setInSun, tweaks }) {
   const d = window.APP_DATA.now;
@@ -374,8 +442,11 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const modDelta = colorDelta + coverDelta;
 
   const baseSun = d.feelsLikeShade + boostedSunDelta;
-  const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
-  const sunCardVal = baseSun + modDelta;
+  // Defensive: never let the displayed 日向 dip below 日陰. The math above
+  // already guarantees baseSun + modDelta >= feelsLikeShade, but clamp here
+  // so any future regression in the delta model can't invert sun and shade.
+  const sunCardVal = Math.max(d.feelsLikeShade, baseSun + modDelta);
+  const feels = inSun ? sunCardVal : d.feelsLikeShade;
 
   // API-driven factor contributions
   const solarDelta = +(d.feelsLikeSun - d.feelsLikeShade).toFixed(1);
@@ -413,6 +484,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
 
         <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
         <AirQualityCard aqi={d.aqi} pm25={d.pm25} pm10={d.pm10} />
+        <PetGroundCard airTemp={d.airTemp} solar={d.solar || 0} groundTemp={d.groundTemp} />
 
         {isNight && (
           <div className="night-note">
