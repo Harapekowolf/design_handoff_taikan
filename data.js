@@ -14,28 +14,29 @@ window.APP_DATA = {
     uv: 7,
     solar: 780,             // W/m² 日射量
     pressure: 1012,
+    soilTemp: 29.5,         // 地表(土・芝)温度 °C
     sunrise: '05:02',
     sunset: '18:14',
   },
 
-  // 1時間ごとの予報 (気温 / 日向体感 / 日陰体感 / 湿度 / 風速 / 日射)
+  // 1時間ごとの予報 (気温 / 日向体感 / 日陰体感 / 湿度 / 風速 / 日射 / 地表温度)
   hourly: [
-    { h: 6,  air: 15.2, sun: 16.0, shade: 15.0, hum: 78, wind: 1.1, solar: 40 },
-    { h: 7,  air: 17.0, sun: 19.1, shade: 17.2, hum: 72, wind: 1.4, solar: 180 },
-    { h: 8,  air: 18.9, sun: 22.4, shade: 19.2, hum: 68, wind: 1.8, solar: 340 },
-    { h: 9,  air: 20.4, sun: 25.3, shade: 21.1, hum: 64, wind: 2.0, solar: 500 },
-    { h: 10, air: 21.8, sun: 27.4, shade: 22.4, hum: 62, wind: 2.1, solar: 620 },
-    { h: 11, air: 23.0, sun: 29.1, shade: 23.7, hum: 60, wind: 2.2, solar: 710 },
-    { h: 12, air: 24.0, sun: 30.2, shade: 24.8, hum: 59, wind: 2.3, solar: 760 },
-    { h: 13, air: 24.6, sun: 30.9, shade: 25.4, hum: 58, wind: 2.3, solar: 780 },
-    { h: 14, air: 24.8, sun: 31.2, shade: 25.6, hum: 58, wind: 2.3, solar: 780 },
-    { h: 15, air: 24.5, sun: 30.6, shade: 25.2, hum: 59, wind: 2.4, solar: 700 },
-    { h: 16, air: 23.6, sun: 28.9, shade: 24.2, hum: 61, wind: 2.4, solar: 550 },
-    { h: 17, air: 22.1, sun: 25.8, shade: 22.6, hum: 64, wind: 2.2, solar: 350 },
-    { h: 18, air: 20.3, sun: 21.6, shade: 20.5, hum: 68, wind: 2.0, solar: 120 },
-    { h: 19, air: 18.8, sun: 19.0, shade: 18.8, hum: 71, wind: 1.8, solar: 10 },
-    { h: 20, air: 17.6, sun: 17.6, shade: 17.6, hum: 74, wind: 1.6, solar: 0 },
-    { h: 21, air: 16.9, sun: 16.9, shade: 16.9, hum: 76, wind: 1.4, solar: 0 },
+    { h: 6,  air: 15.2, sun: 16.0, shade: 15.0, hum: 78, wind: 1.1, solar: 40,  soil: 15.4 },
+    { h: 7,  air: 17.0, sun: 19.1, shade: 17.2, hum: 72, wind: 1.4, solar: 180, soil: 18.1 },
+    { h: 8,  air: 18.9, sun: 22.4, shade: 19.2, hum: 68, wind: 1.8, solar: 340, soil: 20.9 },
+    { h: 9,  air: 20.4, sun: 25.3, shade: 21.1, hum: 64, wind: 2.0, solar: 500, soil: 23.4 },
+    { h: 10, air: 21.8, sun: 27.4, shade: 22.4, hum: 62, wind: 2.1, solar: 620, soil: 25.5 },
+    { h: 11, air: 23.0, sun: 29.1, shade: 23.7, hum: 60, wind: 2.2, solar: 710, soil: 27.3 },
+    { h: 12, air: 24.0, sun: 30.2, shade: 24.8, hum: 59, wind: 2.3, solar: 760, soil: 28.6 },
+    { h: 13, air: 24.6, sun: 30.9, shade: 25.4, hum: 58, wind: 2.3, solar: 780, soil: 29.3 },
+    { h: 14, air: 24.8, sun: 31.2, shade: 25.6, hum: 58, wind: 2.3, solar: 780, soil: 29.5 },
+    { h: 15, air: 24.5, sun: 30.6, shade: 25.2, hum: 59, wind: 2.4, solar: 700, soil: 28.7 },
+    { h: 16, air: 23.6, sun: 28.9, shade: 24.2, hum: 61, wind: 2.4, solar: 550, soil: 26.9 },
+    { h: 17, air: 22.1, sun: 25.8, shade: 22.6, hum: 64, wind: 2.2, solar: 350, soil: 24.2 },
+    { h: 18, air: 20.3, sun: 21.6, shade: 20.5, hum: 68, wind: 2.0, solar: 120, soil: 21.0 },
+    { h: 19, air: 18.8, sun: 19.0, shade: 18.8, hum: 71, wind: 1.8, solar: 10,  soil: 18.9 },
+    { h: 20, air: 17.6, sun: 17.6, shade: 17.6, hum: 74, wind: 1.6, solar: 0,   soil: 17.6 },
+    { h: 21, air: 16.9, sun: 16.9, shade: 16.9, hum: 76, wind: 1.4, solar: 0,   soil: 16.9 },
   ],
 
   // 週間予報

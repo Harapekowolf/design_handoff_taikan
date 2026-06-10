@@ -79,7 +79,7 @@
     const url = 'https://api.open-meteo.com/v1/forecast' +
       `?latitude=${lat}&longitude=${lon}` +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,uv_index,shortwave_radiation,weather_code,pressure_msl' +
-      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation' +
+      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation,soil_temperature_0cm' +
       '&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,weather_code,sunrise,sunset' +
       '&timezone=auto&forecast_days=7&wind_speed_unit=ms';
     const res = await fetch(url);
@@ -120,10 +120,15 @@
     };
 
     const hourlyOut = [];
+    const soilArr = h.soil_temperature_0cm || [];
     for (let i = 0; i < h.time.length; i++) {
       const [tDate, tTime = '00:00'] = h.time[i].split('T');
       if (tDate !== todayStr) continue;
       const hh = parseInt(tTime.slice(0, 2), 10);
+      // Ground temp for "now" comes from the matching hourly slot (current= has no soil var).
+      if (hh === hr && soilArr[i] != null) {
+        window.APP_DATA.now.soilTemp = +(soilArr[i].toFixed(1));
+      }
       if (hh < 6 || hh > 21) continue;
       const shade = h.apparent_temperature[i];
       const solar = h.shortwave_radiation[i] || 0;
@@ -135,6 +140,7 @@
         hum: Math.round(h.relative_humidity_2m[i]),
         wind: +(h.wind_speed_10m[i].toFixed(1)),
         solar: Math.round(solar),
+        soil: soilArr[i] != null ? +(soilArr[i].toFixed(1)) : null,
       });
     }
     if (hourlyOut.length >= 4) window.APP_DATA.hourly = hourlyOut;
