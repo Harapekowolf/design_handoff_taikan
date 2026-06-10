@@ -420,46 +420,21 @@ function OutfitM() {
 }
 
 // ─── WALK (dog) ───
-// Ground-surface model: asphalt absorbs ~95% of shortwave and vents poorly,
-// ≈ +0.03 °C per W/m² over air temp on a clear day (40–50°C asphalt at
-// 25°C air / 780 W/m² matches JSPCA field measurements).
-function asphaltTemp(air, solar) {
-  return air + (solar || 0) * 0.03;
-}
-// 肉球セーフティ: 夏のやけど (アスファルト50°C+で数分で受傷) と
-// 冬の凍結・融雪剤の両方をカバーする5段階。
-function pawCategory(t) {
-  if (t <= 0)  return { label: '凍結注意', level: 'freeze', note: 'ひび割れ・凍傷のおそれ' };
-  if (t < 5)   return { label: '冷たい',   level: 'chill',  note: '短めに。融雪剤は拭き取りを' };
-  if (t < 40)  return { label: '快適',     level: 'safe',   note: '肉球にやさしい路面' };
-  if (t < 50)  return { label: '注意',     level: 'warn',   note: '長時間の歩行は避けて' };
-  return         { label: '危険',     level: 'danger', note: '肉球やけどのおそれ' };
-}
-// Contiguous safe-hour runs → recommended walk windows.
-function walkWindows(ribbon) {
-  const runs = [];
-  let start = null;
-  ribbon.forEach((r, i) => {
-    const ok = r.cat.level === 'safe';
-    if (ok && start == null) start = r.h;
-    if (!ok && start != null) { runs.push([start, ribbon[i - 1].h]); start = null; }
-  });
-  if (start != null) runs.push([start, ribbon[ribbon.length - 1].h]);
-  return runs;
-}
+// Ground model (asphaltTemp / pawCategory / walkWindows) lives in
+// walk-model.js — pure functions shared with tests/walk-model.test.js.
 
 function WalkM() {
   const d = window.APP_DATA.now;
   const hours = window.APP_DATA.hourly;
   const nowHour = parseInt((d.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
   const solar = d.solar || 0;
-  const asphalt = asphaltTemp(d.airTemp, solar);
+  const asphalt = asphaltTemp(d.airTemp, solar, d.windMS);
   const soil = d.soilTemp != null ? d.soilTemp : d.airTemp + solar * 0.006;
   const aCat = pawCategory(asphalt);
   const sCat = pawCategory(soil);
 
   const ribbon = hours.map(h => {
-    const t = asphaltTemp(h.air, h.solar);
+    const t = asphaltTemp(h.air, h.solar, h.wind);
     return { h: h.h, t, cat: pawCategory(t) };
   });
   const windows = walkWindows(ribbon);

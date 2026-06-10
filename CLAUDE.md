@@ -25,7 +25,7 @@ Entry points:
 
 `netlify.toml` publishes the repo root and serves `.jsx` as `text/babel` so Babel Standalone can transpile them. Any server change must preserve that MIME mapping.
 
-No tests, no linter, no typecheck. Validate changes by loading the page in a browser and exercising all seven screens + the tweaks panel.
+No linter, no typecheck. The only test suite is `node tests/walk-model.test.js` (pure-function tests for the dog-walk ground model — run it whenever `walk-model.js` changes). Validate UI changes by loading the page in a browser and exercising all seven screens + the tweaks panel.
 
 ## Architecture
 
@@ -53,7 +53,7 @@ The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` t
   4. Computes `feelsLikeSun = apparent_temperature + shortwave_radiation × 0.007`.
   5. Mutates `window.APP_DATA` in place and dispatches `weather:loaded` / `weather:updated` events.
   6. Also per-region fetches for the map screen.
-- The dog-walk screen (`WalkM`) estimates asphalt surface temp as `air + solar × 0.03` (clear-sky fit; `asphaltTemp()`), and maps any surface temp to a 5-level paw-safety category (`pawCategory()`: 凍結注意 / 冷たい / 快適 / 注意 / 危険 — thresholds 0 / 5 / 40 / 50 °C). Keep these two helpers in sync with any copy that mentions ground temperature.
+- The dog-walk ground model lives in `walk-model.js` (plain script, loaded before `mobile-app.jsx`; also `require()`-able from node for tests). `asphaltTemp(air, solar, wind)` = `air + solar × 0.025 × 1.15/(1 + 0.08·wind)` — calibrated against published field measurements (anchors are asserted in `tests/walk-model.test.js`). `pawCategory()` maps any surface temp to a 5-level paw-safety category (凍結注意 / 冷たい / 快適 / 注意 / 危険 — thresholds 0 / 5 / 40 / 50 °C). Keep these helpers, the tests, and any UI copy that mentions ground temperature in sync.
 - Components read `window.APP_DATA` directly on render (no context/store). `MobileApp` subscribes to the `weather:*` events and force-updates via `useReducer`.
 
 When editing data-driven logic, remember that `APP_DATA` is mutated after mount — do not cache derived values outside of render.
