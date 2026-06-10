@@ -6,20 +6,85 @@ function MobileApp() {
   const [screen, setScreen] = React.useState(
     () => localStorage.getItem('taikan.m.screen') || 'home'
   );
-  const [inSun, setInSun] = React.useState(true);
+  const [inSun, setInSun] = React.useState(
+    () => localStorage.getItem('taikan.m.inSun') !== '0'
+  );
+  const [heatAlerts, setHeatAlerts] = React.useState(
+    () => localStorage.getItem('taikan.m.heatAlerts') === '1'
+  );
+  const [notifState, setNotifState] = React.useState(() =>
+    (typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
+  );
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+
+  React.useEffect(() => {
+    localStorage.setItem('taikan.m.heatAlerts', heatAlerts ? '1' : '0');
+  }, [heatAlerts]);
+
+  // Fire a local heat-stroke notification when WBGT ≥ 28, at most once per day.
+  React.useEffect(() => {
+    if (!heatAlerts) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const check = () => {
+      const d = window.APP_DATA && window.APP_DATA.now;
+      if (!d) return;
+      const v = wbgtValue(d.airTemp, d.humidity, d.solar || 0);
+      if (v < 28) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const lastKey = 'taikan.m.heatAlertedOn';
+      if (localStorage.getItem(lastKey) === today) return;
+      localStorage.setItem(lastKey, today);
+      const { label } = wbgtCategory(v);
+      const body = `${d.location || '現在地'} · WBGT ${v.toFixed(1)} (${label}) · 水分と休息を意識しましょう。`;
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification('熱中症注意 · taikan.', {
+            body, tag: 'heat-alert', icon: 'icon-192.png', badge: 'icon-192.png',
+          }).catch(() => new Notification('熱中症注意 · taikan.', { body }));
+        }).catch(() => new Notification('熱中症注意 · taikan.', { body }));
+      } else {
+        new Notification('熱中症注意 · taikan.', { body });
+      }
+    };
+    window.addEventListener('weather:loaded', check);
+    check();
+    return () => window.removeEventListener('weather:loaded', check);
+  }, [heatAlerts]);
+
+  const requestAlerts = async () => {
+    if (typeof Notification === 'undefined') { setNotifState('unsupported'); return; }
+    if (Notification.permission === 'granted') {
+      setNotifState('granted');
+      setHeatAlerts(true);
+      return;
+    }
+    try {
+      const p = await Notification.requestPermission();
+      setNotifState(p);
+      if (p === 'granted') setHeatAlerts(true);
+    } catch (_) {
+      setNotifState('denied');
+    }
+  };
 
   React.useEffect(() => {
     localStorage.setItem('taikan.m.screen', screen);
   }, [screen]);
+  React.useEffect(() => {
+    localStorage.setItem('taikan.m.inSun', inSun ? '1' : '0');
+  }, [inSun]);
 
   React.useEffect(() => {
     const on = () => forceUpdate();
+    window.addEventListener('weather:loading', on);
     window.addEventListener('weather:loaded', on);
     window.addEventListener('weather:updated', on);
+    window.addEventListener('weather:error', on);
     return () => {
+      window.removeEventListener('weather:loading', on);
       window.removeEventListener('weather:loaded', on);
       window.removeEventListener('weather:updated', on);
+      window.removeEventListener('weather:error', on);
     };
   }, []);
 
@@ -83,12 +148,21 @@ function MobileApp() {
     <div className="m-frame">
       <div className="m-app" data-screen-label={`mobile-${screen}`}>
         <MHeader title={screenTitle(screen)} />
+        <WeatherErrorBanner />
         <div className="m-scroll">
           {screens[screen]}
         </div>
         <MTabBar screen={screen} setScreen={setScreen} />
       </div>
-      <TweaksM open={tweaksOpen} tweaks={tweaks} setTweaks={setTweaks} />
+      <TweaksM
+        open={tweaksOpen}
+        tweaks={tweaks}
+        setTweaks={setTweaks}
+        heatAlerts={heatAlerts}
+        setHeatAlerts={setHeatAlerts}
+        notifState={notifState}
+        requestAlerts={requestAlerts}
+      />
     </div>
   );
 }
@@ -101,13 +175,55 @@ function screenTitle(s) {
 }
 
 function MHeader({ title }) {
+  const ws = window.WEATHER_STATE || {};
+  const updated = ws.lastUpdated
+    ? new Date(ws.lastUpdated).toTimeString().slice(0, 5)
+    : null;
+  const onRefresh = () => {
+    if (ws.loading) return;
+    if (typeof window.refreshWeather === 'function') window.refreshWeather();
+  };
   return (
     <div className="m-header">
       <div className="loc">
         <span className="name">{title}</span>
         <span className="time">{window.APP_DATA.now.timeLabel}</span>
       </div>
-      <span className="brand">taikan.</span>
+      <div className="meta">
+        <span className="brand">taikan.</span>
+        <button
+          type="button"
+          className={`refresh ${ws.loading ? 'loading' : ''} ${ws.error ? 'error' : ''}`}
+          onClick={onRefresh}
+          aria-label="天気を更新"
+          disabled={ws.loading}
+        >
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 4v4h-4"/>
+            <path d="M16 8A6 6 0 104 10"/>
+          </svg>
+          <span>{ws.loading ? '更新中' : (updated ? `${updated} 更新` : '未取得')}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WeatherErrorBanner() {
+  const ws = window.WEATHER_STATE || {};
+  if (!ws.error) return null;
+  const onRetry = () => {
+    if (typeof window.refreshWeather === 'function') window.refreshWeather();
+  };
+  const msg = ws.source === 'dummy'
+    ? '天気データを取得できませんでした（ダミー値を表示中）'
+    : '天気データを更新できませんでした';
+  return (
+    <div className="weather-error">
+      <span>{msg}</span>
+      <button type="button" onClick={onRetry} disabled={ws.loading}>
+        {ws.loading ? '更新中…' : '再試行'}
+      </button>
     </div>
   );
 }
@@ -145,10 +261,140 @@ function IconMap()     { return <svg {...iprops}><path d="M2.5 5l5-2 5 2 5-2v12l
 function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.9 2.5 10c0 3 1.6 5 4.5 5 1.5 0 2-.8 2-1.8s-.5-1.5.2-2.2c.7-.7 1.5-.5 2.8-.5 2.8 0 5.5-1.2 5.5-4C17.5 4.7 14.1 2.5 10 2.5z"/><circle cx="6.5" cy="8" r="0.8" fill="currentColor"/><circle cx="10" cy="5.5" r="0.8" fill="currentColor"/><circle cx="13.5" cy="7" r="0.8" fill="currentColor"/></svg>; }
 function IconPaw()     { return <svg {...iprops}><ellipse cx="4.5" cy="8" rx="1.6" ry="2.1"/><ellipse cx="8.2" cy="5.4" rx="1.6" ry="2.2"/><ellipse cx="11.8" cy="5.4" rx="1.6" ry="2.2"/><ellipse cx="15.5" cy="8" rx="1.6" ry="2.1"/><path d="M10 9.8c2.6 0 4.4 2 4.4 3.9 0 1.5-1.1 2.6-2.4 2.3-.8-.2-1.3-.4-2-.4s-1.2.2-2 .4c-1.3.3-2.4-.8-2.4-2.3 0-1.9 1.8-3.9 4.4-3.9z"/></svg>; }
 
+// Physics-ish feels-like model for clothing color + cover.
+// Baseline: at wind=2 m/s, RH=50% → 0.007 °C per W/m² (matches feelsLikeSun).
+// Wind cools convectively, humid air hinders sweat evaporation.
+function sunHeatCoef(wind, rh) {
+  const BASE = 0.007;
+  const convMult = (6 + 3.7 * 2) / (6 + 3.7 * Math.max(0, wind));
+  const rhMult = 1 + Math.max(0, (rh - 50) / 250);
+  return BASE * convMult * rhMult;
+}
+const COVER_FRAC = { parasol: 0.80 };
+
+// JMA-style apparent-temperature decomposition (AT = T + 0.33·e − 0.70·WS − 4).
+// Show each factor's departure from the neutral baseline (RH 50%, WS 0).
+function vaporPressureHpa(t, rh) {
+  return (rh / 100) * 6.105 * Math.exp((17.27 * t) / (237.7 + t));
+}
+function humidityDeltaC(t, rh) {
+  return 0.33 * (vaporPressureHpa(t, rh) - vaporPressureHpa(t, 50));
+}
+function windDeltaC(windMS) {
+  return -0.70 * (windMS || 0);
+}
+
+// WBGT (暑さ指数) approx: Ono/Tonouchi-ish fit using Ta, RH, solar.
+function wbgtValue(temp, rh, solar) {
+  const raw = 0.735 * temp + 0.0374 * rh + 0.00292 * temp * rh + 0.004 * (solar || 0) - 4.064;
+  return Math.max(0, raw);
+}
+function wbgtCategory(v) {
+  if (v < 21) return { label: 'ほぼ安全', level: 'safe',   note: '熱中症の危険は少ない' };
+  if (v < 25) return { label: '注意',     level: 'mild',   note: '激しい運動では水分補給を' };
+  if (v < 28) return { label: '警戒',     level: 'warn',   note: '積極的に休息と水分を' };
+  if (v < 31) return { label: '厳重警戒', level: 'strict', note: '外出時は熱中症に注意' };
+  return          { label: '危険',     level: 'danger', note: '外出・運動はなるべく避ける' };
+}
+function WbgtBadge({ temp, rh, solar }) {
+  const v = wbgtValue(temp, rh, solar);
+  const { label, level, note } = wbgtCategory(v);
+  return (
+    <div className={`wbgt-badge lv-${level}`}>
+      <div className="wbgt-top">
+        <span className="wbgt-k">暑さ指数 <span className="mono">WBGT</span></span>
+        <span className="wbgt-v mono">{v.toFixed(1)}</span>
+        <span className="wbgt-cat">{label}</span>
+      </div>
+      <div className="wbgt-scale" aria-hidden="true">
+        {[21, 25, 28, 31].map((t, i) => (
+          <span key={i} className="tick" style={{ left: `${Math.min(100, (t / 35) * 100)}%` }}/>
+        ))}
+        <span className="mark" style={{ left: `${Math.min(100, Math.max(0, (v / 35) * 100))}%` }}/>
+      </div>
+      <div className="wbgt-note">{note}</div>
+    </div>
+  );
+}
+
+// Air-quality categorization (PM2.5 + European AQI).
+function pm25Category(pm) {
+  if (pm == null) return null;
+  if (pm <= 12)  return { label: '良好',     level: 'safe' };
+  if (pm <= 25)  return { label: '普通',     level: 'mild' };
+  if (pm <= 50)  return { label: '注意',     level: 'warn' };
+  if (pm <= 100) return { label: '悪い',     level: 'strict' };
+  return             { label: '非常に悪い', level: 'danger' };
+}
+
+function AirQualityCard({ aqi, pm25, pm10 }) {
+  if (aqi == null && pm25 == null) return null;
+  const cat = pm25Category(pm25) || { label: '—', level: 'safe' };
+  const aqiLabel = aqi == null ? '—' : aqi;
+  return (
+    <div className={`aq-card lv-${cat.level}`}>
+      <div className="aq-top">
+        <span className="aq-k">大気の質 <span className="mono">AQI</span></span>
+        <span className="aq-v mono">{aqiLabel}</span>
+        <span className="aq-cat">{cat.label}</span>
+      </div>
+      <div className="aq-row">
+        {pm25 != null && <span><span className="k">PM2.5</span><span className="v">{pm25.toFixed(1)} µg/m³</span></span>}
+        {pm10 != null && <span><span className="k">PM10</span><span className="v">{pm10.toFixed(1)} µg/m³</span></span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── HOME ───
 function HomeM({ inSun, setInSun, tweaks }) {
   const d = window.APP_DATA.now;
-  const feels = inSun ? d.feelsLikeSun + (tweaks.solarBoost || 0) : d.feelsLikeShade;
+  const [color, setColor] = React.useState(
+    () => localStorage.getItem('taikan.m.color') || 'black'
+  );
+  const [cover, setCover] = React.useState(() => {
+    const v = localStorage.getItem('taikan.m.cover');
+    return v === 'parasol' ? 'parasol' : 'none';
+  });
+  React.useEffect(() => localStorage.setItem('taikan.m.color', color), [color]);
+  React.useEffect(() => localStorage.setItem('taikan.m.cover', cover), [cover]);
+
+  const isNight = (d.solar || 0) <= 50;
+  const sunActive = inSun && !isNight;
+  const solar = d.solar || 0;
+  const wind = d.windMS || 0;
+  const rh = d.humidity || 50;
+  // Scale clothing-color / cover effects by the ACTUAL sun-shade gap from
+  // the API (not an independently modelled solar×coef figure) so a parasol
+  // can never cool below the shade value regardless of wind/humidity or the
+  // solarBoost slider. Clamp at 0 so boost<0 can't invert sun and shade.
+  const rawSunDelta = Math.max(0, d.feelsLikeSun - d.feelsLikeShade);
+  const boostedSunDelta = Math.max(0, rawSunDelta + (tweaks.solarBoost || 0));
+  const blackMax = +boostedSunDelta.toFixed(1);
+  const colorDelta = sunActive && color === 'black' ? blackMax : 0;
+  const parasolMax = +(boostedSunDelta * COVER_FRAC.parasol).toFixed(1);
+  const coverDelta = sunActive && cover === 'parasol' ? -parasolMax : 0;
+  const modDelta = colorDelta + coverDelta;
+
+  const baseSun = d.feelsLikeShade + boostedSunDelta;
+  const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
+  const sunCardVal = baseSun + modDelta;
+
+  // API-driven factor contributions
+  const solarDelta = +(d.feelsLikeSun - d.feelsLikeShade).toFixed(1);
+  const humDelta = +humidityDeltaC(d.airTemp, rh).toFixed(1);
+  const windDelta = +windDeltaC(wind).toFixed(1);
+  const cond = d.cond || 'sun';
+  const caption = isNight
+    ? '日没後、気温と体感はほぼ同じ。'
+    : cond === 'rain'
+      ? '雨で日射が弱く、気温に近い体感です。'
+      : cond === 'cloud'
+        ? '曇りで日差しは控えめ、気温どおりに感じます。'
+        : inSun
+          ? (solarDelta >= 5 ? '日差しが強く、体は夏日のよう。' : '日差しで気温より少し暑く感じます。')
+          : '日陰では過ごしやすい陽気。';
+  const advice = homeAdvice(d, solarDelta, humDelta, windDelta, isNight, parasolMax);
 
   return (
     <div>
@@ -159,7 +405,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span className="unit">°C</span>
         </div>
         <div className="caption">
-          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{inSun ? '日差しが強く、体は夏日のよう。' : '日陰では過ごしやすい春の陽気。'}
+          気温は <span className="mono">{d.airTemp.toFixed(1)}°C</span>。{caption}
         </div>
         <div className="air">
           <span><span className="k">Air</span> <span className="v">{d.airTemp.toFixed(1)}°</span></span>
@@ -167,6 +413,15 @@ function HomeM({ inSun, setInSun, tweaks }) {
           <span><span className="k">風</span> <span className="v">{d.windMS}m/s</span></span>
           <span><span className="k">UV</span> <span className="v">{d.uv}</span></span>
         </div>
+
+        <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
+        <AirQualityCard aqi={d.aqi} pm25={d.pm25} pm10={d.pm10} />
+
+        {isNight && (
+          <div className="night-note">
+            <span>☁ 日差しなし・色や日よけの効果はありません</span>
+          </div>
+        )}
 
         <div className="sun-shade-toggle">
           <button className={inSun ? 'active' : ''} onClick={() => setInSun(true)}>
@@ -176,13 +431,48 @@ function HomeM({ inSun, setInSun, tweaks }) {
             <ShadeGlyph /> 日陰
           </button>
         </div>
+
+        <div className={`color-toggle ${!sunActive ? 'inactive' : ''}`}>
+          <button className={color === 'black' ? 'active' : ''} onClick={() => setColor('black')}>
+            <span className="sw" style={{ background: '#161616' }} /> 黒
+            {sunActive && blackMax > 0 && <span className="delta">+{blackMax.toFixed(1)}°</span>}
+          </button>
+          <button className={color === 'white' ? 'active' : ''} onClick={() => setColor('white')}>
+            <span className="sw" style={{ background: '#f2f0ea', border: '1px solid var(--rule)' }} /> 白
+          </button>
+        </div>
+
+        <div className={`cover-toggle ${!sunActive ? 'inactive' : ''}`}>
+          <button className={cover === 'none' ? 'active' : ''} onClick={() => setCover('none')}>
+            <CoverNoneGlyph /> なし
+          </button>
+          <button className={cover === 'parasol' ? 'active' : ''} onClick={() => setCover('parasol')}>
+            <ParasolGlyph /> 日傘
+            {sunActive && parasolMax > 0 && <span className="delta">−{parasolMax.toFixed(1)}°</span>}
+          </button>
+        </div>
+
+        {sunActive && (
+          <div className="delta-breakdown">
+            日射 <span className="mono">{solar}</span>
+            <span className="sep">·</span>
+            風 <span className="mono">{wind.toFixed(1)}m/s</span>
+            <span className="sep">·</span>
+            湿度 <span className="mono">{rh}%</span>
+          </div>
+        )}
       </div>
 
       <div className="ss-cards">
         <div className="ss-c sun">
           <span className="lbl"><SunGlyph /> 日向</span>
-          <span className="n">{d.feelsLikeSun.toFixed(1)}°</span>
-          <span className="d">+{(d.feelsLikeSun - d.airTemp).toFixed(1)}° 気温比</span>
+          <span className="n">{sunCardVal.toFixed(1)}°</span>
+          <span className="d">
+            +{(sunCardVal - d.airTemp).toFixed(1)}° 気温比
+            {sunActive && modDelta !== 0 && (
+              <span className="mod">{modDelta > 0 ? '+' : ''}{modDelta.toFixed(1)}° 服装</span>
+            )}
+          </span>
         </div>
         <div className="ss-c shade">
           <span className="lbl"><ShadeGlyph /> 日陰</span>
@@ -197,10 +487,12 @@ function HomeM({ inSun, setInSun, tweaks }) {
       </div>
       <div className="m-factors">
         <FactorRow label="気温" value={d.airTemp} max={40} unit="°C" />
-        <FactorRow label="日射" value={d.solar} max={1000} unit="W/m²" delta={+5.2} pos />
-        <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={+1.4} pos />
-        <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={-0.3} neg />
+        <FactorRow label="日射" value={d.solar} max={1000} unit="W/m²" delta={solarDelta} pos={solarDelta > 0} />
+        <FactorRow label="湿度" value={d.humidity} max={100} unit="%" delta={humDelta} pos={humDelta > 0} neg={humDelta < 0} />
+        <FactorRow label="風速" value={d.windMS} max={10} unit="m/s" delta={windDelta} neg={windDelta < 0} />
         <FactorRow label="服装" value={tweaks.clothing === 'light' ? 1 : tweaks.clothing === 'medium' ? 2 : 3} max={3} unit="lv" delta={tweaks.clothing === 'light' ? -0.4 : tweaks.clothing === 'heavy' ? +1.1 : +0.2} />
+        <FactorRow label="服の色" value={Math.abs(colorDelta)} max={Math.max(blackMax, 0.1)} unit="°" pos={colorDelta > 0} />
+        <FactorRow label="日よけ" value={Math.abs(coverDelta)} max={Math.max(parasolMax, 0.1)} unit="°" neg={coverDelta < 0} />
       </div>
 
       <div className="section-head">
@@ -208,11 +500,48 @@ function HomeM({ inSun, setInSun, tweaks }) {
       </div>
       <div className="insight">
         <div className="eyebrow">Advice</div>
-        <div className="t">日向は夏日、日陰は春の陽気</div>
-        <div className="d">半袖に薄手の羽織りで両方に対応できます。帽子があると日向の体感が約2°C下がります。</div>
+        <div className="t">{advice.t}</div>
+        <div className="d">{advice.d}</div>
       </div>
     </div>
   );
+}
+
+function homeAdvice(d, solarDelta, humDelta, windDelta, isNight, parasolMax) {
+  if (isNight) {
+    return {
+      t: '日没後は気温と体感がほぼ一致',
+      d: '日射による上乗せはありません。気温の変化を目安に。',
+    };
+  }
+  if (d.cond === 'rain') {
+    return {
+      t: `雨・${d.windDir} ${d.windMS.toFixed(1)}m/s`,
+      d: '日射が弱く、体感は気温に近め。濡れると気化冷却でさらに冷えます。',
+    };
+  }
+  if (solarDelta >= 5) {
+    return {
+      t: `日向は${d.feelsLikeSun.toFixed(0)}°、日陰は${d.feelsLikeShade.toFixed(0)}°`,
+      d: `日差しで体感は気温+${solarDelta.toFixed(1)}°。日傘で約${parasolMax.toFixed(1)}°下がります。`,
+    };
+  }
+  if (humDelta >= 1.5) {
+    return {
+      t: '湿度が体感を押し上げる陽気',
+      d: `湿度${d.humidity}%で気温より約+${humDelta.toFixed(1)}°。風通しのよい服装を。`,
+    };
+  }
+  if (windDelta <= -2) {
+    return {
+      t: `${d.windDir} ${d.windMS.toFixed(1)}m/sの風が涼しい`,
+      d: `風による冷却で体感は${windDelta.toFixed(1)}°。肌寒ければ羽織りを。`,
+    };
+  }
+  return {
+    t: '気温と体感の差は小さめ',
+    d: '屋外も屋内も、軽い服装で快適に過ごせます。',
+  };
 }
 
 function FactorRow({ label, value, max, unit, delta, pos, neg }) {
@@ -245,12 +574,31 @@ function ShadeGlyph() {
     </svg>
   );
 }
+function CoverNoneGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <circle cx="10" cy="10" r="6"/>
+      <line x1="6" y1="14" x2="14" y2="6"/>
+    </svg>
+  );
+}
+function ParasolGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 11 Q10 3 17 11"/>
+      <line x1="3" y1="11" x2="17" y2="11"/>
+      <line x1="10" y1="11" x2="10" y2="17"/>
+      <path d="M10 17 Q10 18.5 11.5 18"/>
+    </svg>
+  );
+}
 
 // ─── HOURLY ───
 function HourlyM() {
   const hours = window.APP_DATA.hourly;
   const nowH = window.APP_DATA.now;
   const nowHour = parseInt((nowH.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
+  const insights = hourlyInsights(hours, nowH);
 
   const width = 340, height = 160;
   const padL = 26, padR = 8, padT = 12, padB = 22;
@@ -260,6 +608,44 @@ function HourlyM() {
   const y = (v) => padT + (1 - (v - yMin) / (yMax - yMin)) * innerH;
   const mk = (k) => hours.map((h, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(h[k])}`).join(' ');
 
+  const svgRef = React.useRef(null);
+  const trackingRef = React.useRef(false);
+  const [selIdx, setSelIdx] = React.useState(null);
+
+  function pickIdx(clientX) {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return null;
+    const vbX = ((clientX - rect.left) / rect.width) * width;
+    const t = (vbX - padL) / innerW;
+    const i = Math.round(t * (hours.length - 1));
+    return Math.max(0, Math.min(hours.length - 1, i));
+  }
+  function onDown(e) {
+    trackingRef.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    const i = pickIdx(e.clientX);
+    if (i != null) setSelIdx(i);
+  }
+  function onMove(e) {
+    if (!trackingRef.current) return;
+    const i = pickIdx(e.clientX);
+    if (i != null) setSelIdx(i);
+  }
+  function onUp(e) {
+    trackingRef.current = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  const sel = selIdx != null ? hours[selIdx] : null;
+  const selX = sel ? x(selIdx) : 0;
+  const hasRain = hours.some(hh => (hh.precipProb || 0) > 0);
+  const selHasRain = sel && ((sel.precipProb || 0) > 0 || (sel.precipMm || 0) > 0);
+  const labelW = 92, labelH = selHasRain ? 62 : 50;
+  const labelX = Math.max(padL - 2, Math.min(width - padR - labelW, selX - labelW / 2));
+  const labelY = padT + 2;
+
   return (
     <div>
       <div className="m-chart">
@@ -267,14 +653,36 @@ function HourlyM() {
           <span><span className="swatch sw-sun"></span>日向</span>
           <span><span className="swatch sw-shade"></span>日陰</span>
           <span><span className="swatch sw-air"></span>気温</span>
+          {hasRain && <span><span className="swatch sw-rain"></span>降水</span>}
+          <span className="chart-hint">タップで値表示</span>
         </div>
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" style={{ display: 'block' }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          style={{ display: 'block', touchAction: 'none' }}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        >
           {[15, 20, 25, 30].map(v => (
             <g key={v}>
               <line x1={padL} x2={width - padR} y1={y(v)} y2={y(v)} stroke="#efede8"/>
               <text x={padL - 4} y={y(v) + 3} textAnchor="end" fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">{v}°</text>
             </g>
           ))}
+          {hasRain && hours.map((hh, i) => {
+            const p = hh.precipProb || 0;
+            if (p <= 0) return null;
+            const barMax = 22;
+            const barH = (p / 100) * barMax;
+            const step = innerW / (hours.length - 1);
+            const bw = Math.max(3, step * 0.55);
+            const bx = x(i) - bw / 2;
+            const by = padT + innerH - barH;
+            return <rect key={`r${i}`} x={bx} y={by} width={bw} height={barH} fill="#7ba6c9" opacity="0.35"/>;
+          })}
           <line x1={x(nowHour - 6)} x2={x(nowHour - 6)} y1={padT} y2={padT + innerH} stroke="#d94b1a" strokeDasharray="2 2" strokeWidth="0.8"/>
           <text x={x(nowHour - 6) + 3} y={padT + 7} fontSize="7" fill="#d94b1a" fontFamily="JetBrains Mono" letterSpacing="0.08em">NOW</text>
           <path d={mk('air')} fill="none" stroke="#8a8a8a" strokeWidth="0.8" strokeDasharray="2 2"/>
@@ -285,6 +693,24 @@ function HourlyM() {
           {hours.map((h, i) => i % 3 === 0 && (
             <text key={i} x={x(i)} y={height - 6} textAnchor="middle" fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">{String(h.h).padStart(2,'0')}</text>
           ))}
+          {sel && (
+            <g pointerEvents="none">
+              <line x1={selX} x2={selX} y1={padT} y2={padT + innerH} stroke="#0f0f0f" strokeWidth="0.6"/>
+              <circle cx={selX} cy={y(sel.sun)} r="3.2" fill="#d94b1a" stroke="#f7f5f0" strokeWidth="1"/>
+              <circle cx={selX} cy={y(sel.shade)} r="2.6" fill="#0f0f0f" stroke="#f7f5f0" strokeWidth="1"/>
+              <circle cx={selX} cy={y(sel.air)} r="2" fill="#8a8a8a" stroke="#f7f5f0" strokeWidth="1"/>
+              <g transform={`translate(${labelX}, ${labelY})`}>
+                <rect width={labelW} height={labelH} fill="#f7f5f0" stroke="#0f0f0f" strokeWidth="0.6"/>
+                <text x={6} y={11} fontSize="7" fill="#8a8a8a" fontFamily="JetBrains Mono" letterSpacing="0.08em">{String(sel.h).padStart(2,'0')}:00</text>
+                <text x={6} y={23} fontSize="9" fill="#d94b1a" fontFamily="JetBrains Mono">日向 {sel.sun.toFixed(1)}°</text>
+                <text x={6} y={34} fontSize="9" fill="#0f0f0f" fontFamily="JetBrains Mono">日陰 {sel.shade.toFixed(1)}°</text>
+                <text x={6} y={45} fontSize="8" fill="#8a8a8a" fontFamily="JetBrains Mono">気温 {sel.air.toFixed(1)}°</text>
+                {selHasRain && (
+                  <text x={6} y={57} fontSize="8" fill="#7ba6c9" fontFamily="JetBrains Mono">降水 {sel.precipProb || 0}%{sel.precipMm ? ` / ${sel.precipMm.toFixed(1)}mm` : ''}</text>
+                )}
+              </g>
+            </g>
+          )}
         </svg>
       </div>
 
@@ -302,28 +728,120 @@ function HourlyM() {
         ))}
       </div>
 
+      <WbgtTimeline hours={hours} nowHour={nowHour} />
+
       <div className="section-head">
         <h2>今日のポイント</h2>
       </div>
       <div className="insights">
         <div className="insight">
           <div className="eyebrow">日差しのピーク</div>
-          <div className="t">13:00 – 14:00</div>
-          <div className="d">日向と日陰で最大 +6.3°C の差。帽子や日傘で体感は約2°C下がります。</div>
+          <div className="t">{insights.peak.t}</div>
+          <div className="d">{insights.peak.d}</div>
         </div>
         <div className="insight">
           <div className="eyebrow">涼しくなる時間</div>
-          <div className="t">18:00 以降</div>
-          <div className="d">日没とともに日射がゼロに。気温と体感がほぼ一致します。</div>
+          <div className="t">{insights.cool.t}</div>
+          <div className="d">{insights.cool.d}</div>
         </div>
         <div className="insight">
           <div className="eyebrow">風の影響</div>
-          <div className="t">南南西 2–3 m/s</div>
-          <div className="d">弱い風のため冷却効果は限定的。−0.3°Cほど。</div>
+          <div className="t">{insights.wind.t}</div>
+          <div className="d">{insights.wind.d}</div>
         </div>
       </div>
     </div>
   );
+}
+
+function WbgtTimeline({ hours, nowHour }) {
+  const rows = hours.map(h => {
+    const v = wbgtValue(h.air, h.hum, h.solar);
+    return { h: h.h, v, cat: wbgtCategory(v) };
+  });
+  const peak = rows.reduce((a, b) => (b.v > a.v ? b : a), rows[0]);
+  const warnStart = rows.find(r => r.v >= 28);
+  const warnEnd = [...rows].reverse().find(r => r.v >= 28);
+  let headline;
+  if (warnStart && warnEnd) {
+    headline = warnStart.h === warnEnd.h
+      ? `${String(warnStart.h).padStart(2, '0')}:00 に警戒レベル (WBGT ${peak.v.toFixed(1)})`
+      : `${String(warnStart.h).padStart(2, '0')}:00 – ${String(warnEnd.h + 1).padStart(2, '0')}:00 が警戒以上 (ピーク ${peak.v.toFixed(1)})`;
+  } else {
+    headline = `ピーク ${String(peak.h).padStart(2, '0')}:00 · WBGT ${peak.v.toFixed(1)} (${peak.cat.label})`;
+  }
+  return (
+    <>
+      <div className="section-head">
+        <h2>熱中症リスク</h2>
+        <span className="link">WBGT / 時間帯</span>
+      </div>
+      <div className="wbgt-timeline">
+        <div className="wbgt-row">
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              className={`wbgt-cell lv-${r.cat.level} ${r.h === nowHour ? 'now' : ''}`}
+              title={`${String(r.h).padStart(2, '0')}:00 · WBGT ${r.v.toFixed(1)} (${r.cat.label})`}
+            >
+              <span className="hh">{String(r.h).padStart(2, '0')}</span>
+              <span className="wv mono">{r.v.toFixed(0)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="wbgt-headline">{headline}</div>
+        <div className="wbgt-legend">
+          <span><span className="sw lv-safe" />ほぼ安全</span>
+          <span><span className="sw lv-mild" />注意</span>
+          <span><span className="sw lv-warn" />警戒</span>
+          <span><span className="sw lv-strict" />厳重警戒</span>
+          <span><span className="sw lv-danger" />危険</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function hourlyInsights(hours, now) {
+  let peakI = 0, peakDiff = -Infinity;
+  hours.forEach((h, i) => {
+    const diff = h.sun - h.shade;
+    if ((h.solar || 0) > 30 && diff > peakDiff) { peakDiff = diff; peakI = i; }
+  });
+  const peakH = hours[peakI].h;
+  const peakEnd = Math.min(peakH + 1, 23);
+  const parasolCool = +(peakDiff * COVER_FRAC.parasol).toFixed(1);
+  const peak = peakDiff > 0 ? {
+    t: `${String(peakH).padStart(2, '0')}:00 – ${String(peakEnd).padStart(2, '0')}:00`,
+    d: `日向と日陰で最大 +${peakDiff.toFixed(1)}°C の差。日傘で体感は約${parasolCool.toFixed(1)}°C下がります。`,
+  } : {
+    t: '日差しの弱い一日',
+    d: '日向と日陰の体感差は小さく、天気は穏やかです。',
+  };
+
+  let coolI = -1;
+  for (let i = peakI + 1; i < hours.length; i++) {
+    if ((hours[i].solar || 0) < 30) { coolI = i; break; }
+  }
+  const cool = coolI >= 0 ? {
+    t: `${String(hours[coolI].h).padStart(2, '0')}:00 以降`,
+    d: '日射が弱まり、気温と体感がほぼ一致します。',
+  } : {
+    t: '日中は涼しくなりにくい',
+    d: '夕方まで日射が続く見込みです。長時間の屋外活動は水分補給を。',
+  };
+
+  const avgWind = hours.reduce((s, h) => s + (h.wind || 0), 0) / hours.length;
+  const windDeltaAvg = windDeltaC(avgWind);
+  const windLabel = now.windDir ? `${now.windDir} ${avgWind.toFixed(1)} m/s` : `${avgWind.toFixed(1)} m/s`;
+  const windDesc = avgWind < 2
+    ? `弱い風のため冷却効果は限定的。${windDeltaAvg.toFixed(1)}°C ほど。`
+    : avgWind < 5
+      ? `体感を ${windDeltaAvg.toFixed(1)}°C 下げる程度の風です。`
+      : `強い風で体感は ${windDeltaAvg.toFixed(1)}°C 低下。防風対策を。`;
+  const wind = { t: windLabel, d: windDesc };
+
+  return { peak, cool, wind };
 }
 
 // ─── WEEKLY ───
@@ -367,7 +885,7 @@ function WeeklyM() {
         火曜・水曜にぐっと冷え込みますが、金曜からは再び初夏の陽気。
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.7 }}>
-        日中の気温と体感の差が大きい日が続きます。屋外に長時間いる場合は帽子・水分を。
+        日中の気温と体感の差が大きい日が続きます。屋外に長時間いる場合は日傘・水分を。
       </div>
     </div>
   );
@@ -385,12 +903,18 @@ function CondGlyphM({ cond }) {
 function OutfitM() {
   const d = window.APP_DATA.outfit;
   const n = window.APP_DATA.now;
+  const diff = n.feelsLikeSun - n.feelsLikeShade;
+  const diffNote = diff >= 5
+    ? `日向と日陰で体感が${diff.toFixed(0)}°C以上違う一日です。`
+    : diff >= 2
+      ? `日向と日陰で体感が${diff.toFixed(1)}°C違います。`
+      : '日向・日陰の差は小さく、一着で一日対応できそうです。';
   return (
     <div>
       <div className="outfit-hero-m">
         <div className="eyebrow">Today's Outfit · {n.timeLabel.split('(')[0].trim()}</div>
         <h2>{d.headline}</h2>
-        <div className="sub">{d.subline}。日向と日陰で体感が5°C以上違う一日です。</div>
+        <div className="sub">{d.subline}。{diffNote}</div>
         <div className="outfit-ctx">
           <div className="oc"><span className="k">日向</span><span className="v">{n.feelsLikeSun.toFixed(1)}°</span></div>
           <div className="oc"><span className="k">日陰</span><span className="v">{n.feelsLikeShade.toFixed(1)}°</span></div>
@@ -532,6 +1056,11 @@ function WalkM() {
 // ─── MAP ───
 function MapM() {
   const regions = window.APP_DATA.regions;
+  const hi = regions.reduce((a, b) => (b.delta > a.delta ? b : a), regions[0]);
+  const lo = regions.reduce((a, b) => (b.delta < a.delta ? b : a), regions[0]);
+  const mapComment = hi.delta >= 3
+    ? `${hi.name}で日射による体感上乗せが最大 +${hi.delta.toFixed(1)}°C。${lo.name}は ${lo.delta > 0 ? '+' : ''}${lo.delta.toFixed(1)}°C と対照的。`
+    : '全国的に日差しによる体感の上乗せは限定的。';
   return (
     <div>
       <div className="eyebrow" style={{ marginBottom: 6 }}>Japan · Feels-like map</div>
@@ -570,7 +1099,7 @@ function MapM() {
         ))}
       </div>
       <div style={{ marginTop: 16, fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        太平洋側は日差しで体感が気温を大きく上回っています。
+        {mapComment}
       </div>
     </div>
   );
@@ -579,25 +1108,38 @@ function MapM() {
 // ─── COLORS ───
 function ColorsM() {
   const colors = window.APP_DATA.clothingColors;
+  const now = window.APP_DATA.now;
+  const solar = now.solar || 0;
+  const wind = now.windMS || 0;
+  const rh = now.humidity || 50;
+  // data.js deltaC values are calibrated for (solar=800, wind=2, rh=50),
+  // so the scaling factor is today's coef×solar normalized by that baseline.
+  const BASELINE = 800 * 0.007;
+  const todayCoef = sunHeatCoef(wind, rh);
+  const scale = (solar * todayCoef) / BASELINE;
+  const todayDelta = +(colors[colors.length - 1].deltaC * scale).toFixed(1);
   return (
     <div>
       <div className="c-intro">
         <div className="eyebrow">Clothing · Color & Heat</div>
-        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>5.6°C</span>変わる</h2>
+        <h2>服の色で、<br/>体感は<span style={{ fontStyle: 'italic' }}>{todayDelta.toFixed(1)}°C</span>変わる</h2>
         <div className="blurb">
-          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">24.8°C</span>・日射 <span className="mono">780 W/m²</span> では、黒は白より約 <strong>5.6°C</strong> 暑く感じます。
+          直射日光下の表面温度と体感差。<strong>白</strong>は約70%反射、<strong>黒</strong>は約90%吸収。今日の気温 <span className="mono">{now.airTemp.toFixed(1)}°C</span>・日射 <span className="mono">{solar} W/m²</span>・風 <span className="mono">{wind.toFixed(1)}m/s</span>・湿度 <span className="mono">{rh}%</span> では、黒は白より約 <strong>{todayDelta.toFixed(1)}°C</strong> 暑く感じます。
         </div>
       </div>
       <div className="color-grid-m">
-        {colors.map((c, i) => (
-          <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
-            <div className="c-name">{c.name}</div>
-            <div>
-              <div className="c-delta">+{c.deltaC.toFixed(1)}°</div>
-              <div className="c-surface">SURFACE · {c.surface}°C</div>
+        {colors.map((c, i) => {
+          const scaled = +(c.deltaC * scale).toFixed(1);
+          return (
+            <div key={i} className="color-cell-m" style={{ background: c.hex, color: c.textOn }}>
+              <div className="c-name">{c.name}</div>
+              <div>
+                <div className="c-delta">+{scaled.toFixed(1)}°</div>
+                <div className="c-surface">SURFACE · {c.surface}°C</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="c-notes">
         <div className="n">
@@ -624,8 +1166,18 @@ const DEFAULT_M_TWEAKS = /*EDITMODE-BEGIN*/{
   "solarBoost": 0
 }/*EDITMODE-END*/;
 
-function TweaksM({ open, tweaks, setTweaks }) {
+function TweaksM({ open, tweaks, setTweaks, heatAlerts, setHeatAlerts, notifState, requestAlerts }) {
   if (!open) return null;
+  const canToggle = notifState === 'granted';
+  const statusMsg = notifState === 'unsupported'
+    ? 'この環境では通知に対応していません'
+    : notifState === 'denied'
+      ? 'ブラウザ設定で通知が拒否されています'
+      : notifState === 'default'
+        ? '初回は [許可する] で通知を有効化'
+        : heatAlerts
+          ? `WBGT ≥ 28 で1日1回お知らせ`
+          : 'オフ · 必要な時だけお知らせ';
   return (
     <div style={{
       position: 'fixed', bottom: 20, right: 20, width: 240,
@@ -652,6 +1204,22 @@ function TweaksM({ open, tweaks, setTweaks }) {
           onChange={e => setTweaks({ ...tweaks, solarBoost: parseFloat(e.target.value) })}
           style={{ width: 120, accentColor: '#d94b1a' }} />
         <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>{tweaks.solarBoost > 0 ? '+' : ''}{tweaks.solarBoost}°</span>
+      </div>
+      <div style={{ borderTop: '1px solid #333', margin: '10px 0 6px' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <label style={{ color: '#b8b8b8', fontSize: 11 }}>熱中症アラート</label>
+        {canToggle ? (
+          <button type="button" style={tBtn} onClick={() => setHeatAlerts(!heatAlerts)}>
+            {heatAlerts ? 'オン' : 'オフ'}
+          </button>
+        ) : (
+          <button type="button" style={tBtn} onClick={requestAlerts} disabled={notifState === 'unsupported' || notifState === 'denied'}>
+            許可する
+          </button>
+        )}
+      </div>
+      <div className={`alert-status ${notifState === 'denied' || notifState === 'unsupported' ? 'err' : ''}`}>
+        {statusMsg}
       </div>
     </div>
   );

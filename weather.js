@@ -10,7 +10,7 @@
                 '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'];
   const DAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-  window.WEATHER_STATE = { loading: true, error: null, source: 'dummy' };
+  window.WEATHER_STATE = { loading: true, error: null, source: 'dummy', lastUpdated: null };
 
   function degToJpDir(deg) {
     if (deg == null || isNaN(deg)) return '—';
@@ -79,7 +79,7 @@
     const url = 'https://api.open-meteo.com/v1/forecast' +
       `?latitude=${lat}&longitude=${lon}` +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,uv_index,shortwave_radiation,weather_code,pressure_msl' +
-      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation,soil_temperature_0cm' +
+      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index,shortwave_radiation,precipitation_probability,precipitation,soil_temperature_0cm' +
       '&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,weather_code,sunrise,sunset' +
       '&timezone=auto&forecast_days=7&wind_speed_unit=ms';
     const res = await fetch(url);
@@ -115,6 +115,9 @@
       uv: Math.round(cur.uv_index || 0),
       solar: Math.round(cur.shortwave_radiation || 0),
       pressure: Math.round(cur.pressure_msl || 1013),
+      weatherCode: cur.weather_code,
+      cond: wmoToCond(cur.weather_code),
+      condNote: wmoToNote(cur.weather_code),
       sunrise: (day.sunrise[0] || '').slice(11, 16) || '—',
       sunset: (day.sunset[0] || '').slice(11, 16) || '—',
     };
@@ -140,7 +143,8 @@
         hum: Math.round(h.relative_humidity_2m[i]),
         wind: +(h.wind_speed_10m[i].toFixed(1)),
         solar: Math.round(solar),
-        soil: soilArr[i] != null ? +(soilArr[i].toFixed(1)) : null,
+        precipProb: h.precipitation_probability ? Math.round(h.precipitation_probability[i] || 0) : 0,
+        precipMm: h.precipitation ? +((h.precipitation[i] || 0).toFixed(1)) : 0,
       });
     }
     if (hourlyOut.length >= 4) window.APP_DATA.hourly = hourlyOut;
@@ -162,6 +166,24 @@
         note: wmoToNote(code),
       };
     });
+  }
+
+  async function fetchAirQuality(lat, lon) {
+    try {
+      const url = 'https://air-quality-api.open-meteo.com/v1/air-quality' +
+        `?latitude=${lat}&longitude=${lon}` +
+        '&current=pm2_5,pm10,european_aqi' +
+        '&timezone=auto';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('aqi ' + res.status);
+      const d = await res.json();
+      const c = d.current || {};
+      window.APP_DATA.now.aqi = c.european_aqi != null ? Math.round(c.european_aqi) : null;
+      window.APP_DATA.now.pm25 = c.pm2_5 != null ? +c.pm2_5.toFixed(1) : null;
+      window.APP_DATA.now.pm10 = c.pm10 != null ? +c.pm10.toFixed(1) : null;
+    } catch (err) {
+      // Leave any existing (dummy) values in place.
+    }
   }
 
   async function fetchRegions() {
@@ -193,6 +215,12 @@
   }
 
   async function load() {
+    const prevSource = (window.WEATHER_STATE && window.WEATHER_STATE.source) || 'dummy';
+    window.WEATHER_STATE = {
+      loading: true, error: null, source: prevSource,
+      lastUpdated: window.WEATHER_STATE && window.WEATHER_STATE.lastUpdated,
+    };
+    window.dispatchEvent(new CustomEvent('weather:loading'));
     try {
       const pos = await getPosition();
       const [locName, forecast] = await Promise.all([
@@ -203,17 +231,26 @@
       window.WEATHER_STATE = {
         loading: false, error: null,
         source: pos.fallback ? 'default' : 'gps',
+        lastUpdated: Date.now(),
       };
       window.dispatchEvent(new CustomEvent('weather:loaded'));
+      fetchAirQuality(pos.lat, pos.lon).then(() => {
+        window.dispatchEvent(new CustomEvent('weather:updated'));
+      }).catch(() => {});
       fetchRegions().then(() => {
         window.dispatchEvent(new CustomEvent('weather:updated'));
       }).catch(() => {});
     } catch (err) {
       console.warn('Weather load failed, using dummy data:', err);
-      window.WEATHER_STATE = { loading: false, error: err.message || 'error', source: 'dummy' };
+      window.WEATHER_STATE = {
+        loading: false, error: err.message || 'error', source: 'dummy',
+        lastUpdated: window.WEATHER_STATE && window.WEATHER_STATE.lastUpdated,
+      };
+      window.dispatchEvent(new CustomEvent('weather:error'));
       window.dispatchEvent(new CustomEvent('weather:loaded'));
     }
   }
 
+  window.refreshWeather = load;
   window.WEATHER_PROMISE = load();
 })();
