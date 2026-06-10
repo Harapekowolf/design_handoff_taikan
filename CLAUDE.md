@@ -25,7 +25,7 @@ Entry points:
 
 `netlify.toml` publishes the repo root and serves `.jsx` as `text/babel` so Babel Standalone can transpile them. Any server change must preserve that MIME mapping.
 
-No tests, no linter, no typecheck. Validate changes by loading the page in a browser and exercising all six screens + the tweaks panel.
+No linter, no typecheck. The only test suite is `node tests/walk-model.test.js` (pure-function tests for the dog-walk ground model — run it whenever `walk-model.js` changes). Validate UI changes by loading the page in a browser and exercising all seven screens + the tweaks panel.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ The repo contains **two separate UIs** that share `data.js` but nothing else:
 | Mobile (primary, 402px) | `index.html`, `体感温度アプリ - Mobile.html` | `mobile-app.jsx` (`MobileApp`) | `mobile-styles.css` |
 | Desktop (reference) | `desktop.html`, `体感温度アプリ.html` | `app.jsx` (`App`) + `screens-home.jsx`, `screens-forecast.jsx`, `screens-more.jsx` + `browser-window.jsx` | `styles.css` |
 
-`mobile-app.jsx` is a single file containing all six screens (`HomeM`, `HourlyM`, `WeeklyM`, `OutfitM`, `MapM`, `ColorsM`) plus the header, tab bar, icon set, and tweaks panel. The desktop version splits screens across `screens-*.jsx` and wraps the app in a fake browser chrome (`browser-window.jsx`).
+`mobile-app.jsx` is a single file containing all seven screens (`HomeM`, `HourlyM`, `WeeklyM`, `OutfitM`, `WalkM`, `MapM`, `ColorsM`) plus the header, tab bar, icon set, and tweaks panel. The desktop version splits screens across `screens-*.jsx` and wraps the app in a fake browser chrome (`browser-window.jsx`).
 
 The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` to draw an iOS device chrome around the app. It is **not** loaded by `index.html` / production — the README notes it is not needed in a real implementation.
 
@@ -47,22 +47,24 @@ The `ios-frame.jsx` file is used only by `体感温度アプリ - Mobile.html` t
 - `data.js` defines `window.APP_DATA` with dummy values (Tokyo, 2026-04-18). Shape: `{ now, hourly[], weekly[], regions[], outfit, clothingColors, materials }`. Type sketches are in `README.md`.
   - `now` also carries `weatherCode` + `cond` (`'sun' | 'partly' | 'cloud' | 'rain'`) + `condNote` so UI copy can branch on condition.
   - `now` also carries `aqi` (European AQI 0–100), `pm25`, `pm10` for the `AirQualityCard` on Home.
+  - `now.soilTemp` carries ground-surface (土・芝) temperature for the dog-walk screen.
   - `hourly[]` entries include `precipProb` (%) and `precipMm` so the Hourly chart can overlay a rain layer.
 - `weather.js` (mobile only, loaded by `index.html`) is an IIFE that:
   1. Requests geolocation (falls back to Tokyo if denied).
   2. Reverse-geocodes via bigdatacloud.net.
-  3. Fetches current + hourly + 7-day forecast from **Open-Meteo** (no API key). Hourly request includes `precipitation_probability,precipitation`.
+  3. Fetches current + hourly + 7-day forecast from **Open-Meteo** (no API key). Hourly request includes `precipitation_probability,precipitation,soil_temperature_0cm`.
   4. Computes `feelsLikeSun = apparent_temperature + shortwave_radiation × 0.007`.
   5. Mutates `window.APP_DATA` in place and dispatches `weather:loaded` / `weather:updated` events.
   6. Also per-region fetches for the map screen.
   7. Fetches air quality (PM2.5 / PM10 / European AQI) from `air-quality-api.open-meteo.com` and re-dispatches `weather:updated` on completion. Failure is silent — existing dummy values stay put.
+- The dog-walk ground model lives in `walk-model.js` (plain script, loaded before `mobile-app.jsx`; also `require()`-able from node for tests). `asphaltTemp(air, solar, wind, rh)` = `air + solar × 0.020 × windFactor × humidityFactor` where `windFactor = 1.15 / (1 + 0.08·wind)` and `humidityFactor = 1 − 0.005 · max(0, rh − 50)`. It targets **typical aged urban asphalt** (what real pet owners walk dogs on) rather than freshly-laid black asphalt. The model deliberately avoids anchoring against soil — afternoon soil baselines rise with air, which kept peak values from falling when the coefficient was reduced. Anchors asserted in `tests/walk-model.test.js`. `pawCategory()` maps any surface temp to a 5-level paw-safety category (凍結注意 / 冷たい / 快適 / 注意 / 危険 — thresholds 0 / 5 / 40 / 50 °C). Keep these helpers, the tests, and any UI copy that mentions ground temperature in sync.
 - Components read `window.APP_DATA` directly on render (no context/store). `MobileApp` subscribes to the `weather:*` events and force-updates via `useReducer`.
 
 When editing data-driven logic, remember that `APP_DATA` is mutated after mount — do not cache derived values outside of render. **Never hardcode numeric copy** (e.g. "+5.2°", "最大 +6.3°C", "5°C以上違う") — derive those strings from `APP_DATA` on render.
 
 ### Routing & state
 
-- Screen routing is a single string (`'home' | 'hourly' | 'weekly' | 'outfit' | 'map' | 'colors'`) stored in `localStorage` under `taikan.m.screen` (mobile) or `taikan.screen` (desktop).
+- Screen routing is a single string (`'home' | 'hourly' | 'weekly' | 'outfit' | 'walk' | 'map' | 'colors'`) stored in `localStorage` under `taikan.m.screen` (mobile) or `taikan.screen` (desktop).
 - `inSun: boolean` is local to the Home screen.
 - `tweaks` is local component state. `DEFAULT_M_TWEAKS` / `DEFAULT_TWEAKS` are wrapped in `/*EDITMODE-BEGIN*/ ... /*EDITMODE-END*/` marker comments — an external tooling harness rewrites the JSON between these markers, so **do not remove or rename these markers** when editing defaults.
 

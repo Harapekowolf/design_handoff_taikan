@@ -20,11 +20,12 @@ window.APP_DATA = {
     aqi: 38,                // European AQI 0–100
     pm25: 9.2,              // PM2.5 µg/m³
     pm10: 18.4,             // PM10 µg/m³
+    soilTemp: 29.5,         // 地表(土・芝)温度 °C
     sunrise: '05:02',
     sunset: '18:14',
   },
 
-  // 1時間ごとの予報 (気温 / 日向体感 / 日陰体感 / 湿度 / 風速 / 日射)
+  // 1時間ごとの予報 (気温 / 日向体感 / 日陰体感 / 湿度 / 風速 / 日射 / 降水)
   hourly: [
     { h: 6,  air: 15.2, sun: 16.0, shade: 15.0, hum: 78, wind: 1.1, solar: 40,  precipProb: 5,  precipMm: 0 },
     { h: 7,  air: 17.0, sun: 19.1, shade: 17.2, hum: 72, wind: 1.4, solar: 180, precipProb: 0,  precipMm: 0 },

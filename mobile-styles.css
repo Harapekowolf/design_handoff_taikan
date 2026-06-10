@@ -196,7 +196,7 @@ body {
   font-family: var(--sans);
   font-size: 9px;
   letter-spacing: 0.06em;
-  min-width: 52px;
+  min-width: 44px;
 }
 .m-tab.active { color: var(--ink); }
 .m-tab .tdot {
@@ -881,6 +881,142 @@ body {
   font-size: 10px;
   margin-top: 2px;
   letter-spacing: 0.02em;
+}
+
+/* ===== Walk / dog (mobile) ===== */
+.walk-hero {
+  padding: 4px 0 20px;
+  border-bottom: 1px solid var(--rule);
+}
+.walk-hero h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.05;
+  margin: 8px 0 10px;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.walk-hero .paw-mark {
+  display: inline-flex;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.walk-hero .sub {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+/* Ground temperature cards — paw-safety levels stay within ink/accent palette:
+   safe=card, warn=warm tint, danger=solid accent, chill=paper-2, freeze=solid ink */
+.ground-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.ground-cards .g-c {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  padding: 14px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ground-cards .g-c .lbl {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.ground-cards .g-c .n {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.ground-cards .g-c .n .u {
+  font-size: 14px;
+  color: var(--ink-3);
+  margin-left: 2px;
+}
+.ground-cards .g-c .cat {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.ground-cards .g-c .d {
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+.ground-cards .g-c.lv-warn { background: #f6e3d3; border-color: #eccdb4; }
+.ground-cards .g-c.lv-warn .cat { color: var(--accent); }
+.ground-cards .g-c.lv-danger { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ground-cards .g-c.lv-danger .lbl,
+.ground-cards .g-c.lv-danger .n .u,
+.ground-cards .g-c.lv-danger .d { color: rgba(255,255,255,0.8); }
+.ground-cards .g-c.lv-chill { background: var(--paper-2); }
+.ground-cards .g-c.lv-freeze { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.ground-cards .g-c.lv-freeze .lbl,
+.ground-cards .g-c.lv-freeze .n .u,
+.ground-cards .g-c.lv-freeze .d { color: var(--ink-5); }
+
+/* Hourly walkability ribbon */
+.walk-ribbon {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.walk-ribbon::-webkit-scrollbar { display: none; }
+.walk-cell {
+  min-width: 40px;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  padding: 8px 4px;
+  text-align: center;
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+.walk-cell .hh { color: var(--ink-4); font-size: 9px; letter-spacing: 0.06em; }
+.walk-cell .tv { font-size: 12px; }
+.walk-cell.lv-warn { background: #f6e3d3; border-color: #eccdb4; }
+.walk-cell.lv-warn .tv { color: var(--accent); }
+.walk-cell.lv-danger { background: var(--accent); border-color: var(--accent); }
+.walk-cell.lv-danger .hh { color: rgba(255,255,255,0.75); }
+.walk-cell.lv-danger .tv { color: #fff; }
+.walk-cell.lv-chill { background: var(--paper-2); }
+.walk-cell.lv-freeze { background: var(--ink); border-color: var(--ink); }
+.walk-cell.lv-freeze .hh { color: var(--ink-5); }
+.walk-cell.lv-freeze .tv { color: var(--paper); }
+.walk-cell.now { box-shadow: inset 0 0 0 2px var(--ink); }
+.walk-window {
+  margin-top: 12px;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.walk-note {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.7;
 }
 
 /* ===== Map (mobile) ===== */

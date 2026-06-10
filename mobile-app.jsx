@@ -139,6 +139,7 @@ function MobileApp() {
     hourly: <HourlyM />,
     weekly: <WeeklyM />,
     outfit: <OutfitM />,
+    walk:   <WalkM />,
     map:    <MapM />,
     colors: <ColorsM />,
   };
@@ -169,7 +170,7 @@ function MobileApp() {
 function screenTitle(s) {
   return {
     home: window.APP_DATA.now.location, hourly: '1時間ごと', weekly: '週間予報',
-    outfit: '今日の服装', map: '地域比較', colors: '服の色と体感',
+    outfit: '今日の服装', walk: '犬の散歩', map: '地域比較', colors: '服の色と体感',
   }[s];
 }
 
@@ -233,6 +234,7 @@ function MTabBar({ screen, setScreen }) {
     { id: 'hourly', label: '1時間',   icon: <IconHour /> },
     { id: 'weekly', label: '週間',    icon: <IconWeek /> },
     { id: 'outfit', label: '服装',    icon: <IconShirt /> },
+    { id: 'walk',   label: '散歩',    icon: <IconPaw /> },
     { id: 'map',    label: '地域',    icon: <IconMap /> },
     { id: 'colors', label: '色',      icon: <IconPalette /> },
   ];
@@ -257,6 +259,7 @@ function IconWeek()    { return <svg {...iprops}><rect x="2.5" y="4" width="15" 
 function IconShirt()   { return <svg {...iprops}><path d="M6 3l-3.5 2 1.5 3 2-1v10h8V7l2 1 1.5-3L14 3l-2 2a2 2 0 01-4 0L6 3z"/></svg>; }
 function IconMap()     { return <svg {...iprops}><path d="M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2V5z"/><path d="M7.5 3v12M12.5 5v12"/></svg>; }
 function IconPalette() { return <svg {...iprops}><path d="M10 2.5C5.9 2.5 2.5 5.9 2.5 10c0 3 1.6 5 4.5 5 1.5 0 2-.8 2-1.8s-.5-1.5.2-2.2c.7-.7 1.5-.5 2.8-.5 2.8 0 5.5-1.2 5.5-4C17.5 4.7 14.1 2.5 10 2.5z"/><circle cx="6.5" cy="8" r="0.8" fill="currentColor"/><circle cx="10" cy="5.5" r="0.8" fill="currentColor"/><circle cx="13.5" cy="7" r="0.8" fill="currentColor"/></svg>; }
+function IconPaw()     { return <svg {...iprops}><ellipse cx="4.5" cy="8" rx="1.6" ry="2.1"/><ellipse cx="8.2" cy="5.4" rx="1.6" ry="2.2"/><ellipse cx="11.8" cy="5.4" rx="1.6" ry="2.2"/><ellipse cx="15.5" cy="8" rx="1.6" ry="2.1"/><path d="M10 9.8c2.6 0 4.4 2 4.4 3.9 0 1.5-1.1 2.6-2.4 2.3-.8-.2-1.3-.4-2-.4s-1.2.2-2 .4c-1.3.3-2.4-.8-2.4-2.3 0-1.9 1.8-3.9 4.4-3.9z"/></svg>; }
 
 // Physics-ish feels-like model for clothing color + cover.
 // Baseline: at wind=2 m/s, RH=50% → 0.007 °C per W/m² (matches feelsLikeSun).
@@ -935,6 +938,116 @@ function OutfitM() {
       </div>
       <div style={{ marginTop: 18, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.7 }}>
         ※ 体感 <span className="mono">{n.feelsLikeShade.toFixed(0)}–{n.feelsLikeSun.toFixed(0)}°C</span> を基準に、屋外滞在20分以上を想定しています。
+      </div>
+    </div>
+  );
+}
+
+// ─── WALK (dog) ───
+// Ground model (asphaltTemp / pawCategory / walkWindows) lives in
+// walk-model.js — pure functions shared with tests/walk-model.test.js.
+
+function WalkM() {
+  const d = window.APP_DATA.now;
+  const hours = window.APP_DATA.hourly;
+  const nowHour = parseInt((d.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
+  const solar = d.solar || 0;
+  const soil = d.soilTemp != null ? d.soilTemp : d.airTemp + solar * 0.006;
+  const asphalt = asphaltTemp(d.airTemp, solar, d.windMS, d.humidity);
+  const aCat = pawCategory(asphalt);
+  const sCat = pawCategory(soil);
+
+  const ribbon = hours.map(h => {
+    const t = asphaltTemp(h.air, h.solar, h.wind, h.hum);
+    return { h: h.h, t, cat: pawCategory(t) };
+  });
+  const windows = walkWindows(ribbon);
+  const lastH = ribbon[ribbon.length - 1].h;
+  const windowLabel = windows.length === 0
+    ? '今日は路面コンディションが厳しめ'
+    : windows.length === ribbon.length || (windows.length === 1 && windows[0][0] === ribbon[0].h && windows[0][1] === lastH)
+      ? '終日おすすめ'
+      : 'おすすめは ' + windows.map(([a, b]) =>
+          b === lastH ? `${a}時以降` : `${a}–${b + 1}時`
+        ).join('・');
+
+  const verdict =
+    aCat.level === 'danger' ? '散歩は、あとで。' :
+    aCat.level === 'warn'   ? '日陰と土の道を選んで。' :
+    aCat.level === 'freeze' ? '路面の凍結に注意。' :
+    aCat.level === 'chill'  ? '足早に、暖かくして。' :
+    '散歩日和。';
+  const verdictSub =
+    aCat.level === 'danger' ? `アスファルトは推定${asphalt.toFixed(0)}°C。肉球が数分でやけどする温度です。` :
+    aCat.level === 'warn'   ? `アスファルトは推定${asphalt.toFixed(0)}°C。土や芝なら${soil.toFixed(0)}°Cです。` :
+    aCat.level === 'freeze' ? `路面は${Math.min(asphalt, soil).toFixed(0)}°C。融雪剤を踏んだら帰宅後に足を洗って。` :
+    aCat.level === 'chill'  ? `路面は${asphalt.toFixed(0)}°C前後。肉球クリームでひび割れ予防を。` :
+    `路面は${asphalt.toFixed(0)}°C前後。肉球にやさしい時間帯です。`;
+
+  return (
+    <div>
+      <div className="walk-hero">
+        <div className="eyebrow">Dog walk · {d.location}</div>
+        <h2><span className="paw-mark"><IconPaw /></span>{verdict}</h2>
+        <div className="sub">{verdictSub}</div>
+      </div>
+
+      <div className="ground-cards">
+        <div className={`g-c lv-${aCat.level}`}>
+          <span className="lbl">アスファルト</span>
+          <span className="n">{asphalt.toFixed(0)}<span className="u">°C</span></span>
+          <span className="cat">{aCat.label}</span>
+          <span className="d">{aCat.note}</span>
+        </div>
+        <div className={`g-c lv-${sCat.level}`}>
+          <span className="lbl">土・芝</span>
+          <span className="n">{soil.toFixed(0)}<span className="u">°C</span></span>
+          <span className="cat">{sCat.label}</span>
+          <span className="d">{sCat.note}</span>
+        </div>
+      </div>
+
+      <div className="section-head">
+        <h2>散歩タイム</h2>
+        <span className="link">路面温度 / 時間帯</span>
+      </div>
+      <div className="walk-ribbon">
+        {ribbon.map((r, i) => (
+          <div key={i} className={`walk-cell lv-${r.cat.level} ${r.h === nowHour ? 'now' : ''}`}>
+            <span className="hh">{String(r.h).padStart(2, '0')}</span>
+            <span className="tv">{r.t.toFixed(0)}°</span>
+          </div>
+        ))}
+      </div>
+      <div className="walk-window">{windowLabel}</div>
+
+      <div className="section-head">
+        <h2>散歩メモ</h2>
+      </div>
+      <div className="insights">
+        <div className="insight">
+          <div className="eyebrow">5秒ルール</div>
+          <div className="t">手の甲を路面に5秒</div>
+          <div className="d">5秒当てられない熱さなら、肉球も歩けません。出発前に必ず確認を。</div>
+        </div>
+        {(aCat.level === 'warn' || aCat.level === 'danger') && (
+          <div className="insight">
+            <div className="eyebrow">暑さ対策</div>
+            <div className="t">水と日陰ルート</div>
+            <div className="d">犬は地面に近いぶん体感は人より+{(d.feelsLikeSun - d.feelsLikeShade).toFixed(0)}°C近く暑くなります。給水はこまめに。</div>
+          </div>
+        )}
+        {(aCat.level === 'chill' || aCat.level === 'freeze') && (
+          <div className="insight">
+            <div className="eyebrow">寒さ対策</div>
+            <div className="t">肉球ケアと融雪剤</div>
+            <div className="d">帰宅後は足を温水で洗い、ひび割れには肉球クリームを。融雪剤は舐めると中毒のおそれ。</div>
+          </div>
+        )}
+      </div>
+
+      <div className="walk-note">
+        ※ アスファルト温度は気温と日射からの推定値、土・芝は地表温度の実況値です。実際の路面で5秒ルールの確認を。
       </div>
     </div>
   );
