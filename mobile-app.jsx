@@ -428,13 +428,13 @@ function WalkM() {
   const hours = window.APP_DATA.hourly;
   const nowHour = parseInt((d.timeLabel.split(') ')[1] || '').slice(0, 2), 10) || 14;
   const solar = d.solar || 0;
-  const asphalt = asphaltTemp(d.airTemp, solar, d.windMS);
   const soil = d.soilTemp != null ? d.soilTemp : d.airTemp + solar * 0.006;
+  const asphalt = asphaltTemp(d.airTemp, solar, d.windMS, d.soilTemp);
   const aCat = pawCategory(asphalt);
   const sCat = pawCategory(soil);
 
   const ribbon = hours.map(h => {
-    const t = asphaltTemp(h.air, h.solar, h.wind);
+    const t = asphaltTemp(h.air, h.solar, h.wind, h.soil);
     return { h: h.h, t, cat: pawCategory(t) };
   });
   const windows = walkWindows(ribbon);

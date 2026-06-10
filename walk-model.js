@@ -4,16 +4,31 @@
 (function (root) {
   'use strict';
 
-  // Asphalt surface temperature, clear-sky empirical fit.
-  // delta = solar × 0.025 × windFactor, windFactor = 1.15 / (1 + 0.08·wind)
-  // Calibrated against published field measurements:
-  //   - JAF August test: air 35.5°C / solar ~950 / calm  → asphalt 58–63°C
-  //   - May clear noon:  air 26°C  / solar ~800 / wind 2 → asphalt ~44°C
-  //   - 環境省 heat-island: air 30°C / solar ~900        → asphalt 50–55°C
+  // Asphalt surface temperature.
+  //
+  // When the API gives us live ground temperature (土・芝 / soil_temperature_0cm),
+  // we anchor against it — asphalt sits ≈ 10–15°C above bare soil at clear noon,
+  // and using the measured soil baseline absorbs humidity / soil-moisture effects
+  // that pure air-based fits miss.
+  //   soil-anchored:  max(soil, air) + solar × 0.020 × windFactor
+  //
+  // Fallback (no soil): air + solar × 0.025 × windFactor — slightly higher
+  // coefficient since we lose the cooling baseline that soil provides.
+  //   windFactor = 1.15 / (1 + 0.08·wind)
+  //
+  // Calibrated against published field measurements (anchors asserted in
+  // tests/walk-model.test.js):
+  //   - JAF August test: air 35.5°C / solar ~950 / soil ~40°C → asphalt 58–63°C
+  //   - May clear noon:  air 26°C  / solar ~800 / soil ~30°C → asphalt 42–47°C
+  //   - 環境省 heat-island: air 30°C / solar ~900 / soil ~35°C → asphalt 50–55°C
   //   - Cloudy (solar <200): surface ≈ air + 2–5°C
-  function asphaltTemp(air, solar, wind) {
+  function asphaltTemp(air, solar, wind, soil) {
     const windFactor = 1.15 / (1 + 0.08 * Math.max(0, wind || 0));
-    return air + (solar || 0) * 0.025 * windFactor;
+    const sol = solar || 0;
+    if (soil != null) {
+      return Math.max(soil, air) + sol * 0.020 * windFactor;
+    }
+    return air + sol * 0.025 * windFactor;
   }
 
   // 肉球セーフティ: 夏のやけど (アスファルト50°C+で数分で受傷) と
