@@ -597,6 +597,57 @@ body {
 .aq-card.lv-strict .aq-cat,
 .aq-card.lv-danger .aq-cat { color: var(--accent); }
 
+/* Direct-sun (black-globe) temperature badge */
+.globe-badge {
+  margin-top: 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  border-left-width: 3px;
+  border-left-color: var(--ink-5);
+}
+.globe-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.globe-k {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+  text-transform: uppercase;
+}
+.globe-k .mono { font-size: 9px; }
+.globe-v {
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1;
+}
+.globe-v .u { font-size: 11px; color: var(--ink-3); margin-left: 2px; }
+.globe-cat {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.globe-note {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.globe-badge.lv-mild   { border-left-color: var(--ink-3); }
+.globe-badge.lv-warn   { border-left-color: var(--accent); }
+.globe-badge.lv-warn .globe-cat { color: var(--accent); }
+.globe-badge.lv-danger {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+.globe-badge.lv-danger .globe-cat,
+.globe-badge.lv-danger .globe-v { color: var(--accent); }
+
 /* Dog-paw ground summary on Home (tap → 散歩 screen) */
 .paw-card {
   display: block;
