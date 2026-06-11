@@ -3,7 +3,7 @@
 // Asphalt anchors come from published field measurements (see walk-model.js).
 
 require('../walk-model.js');
-const { asphaltTemp, concreteTemp, pawCategory, walkWindows } = globalThis;
+const { asphaltTemp, concreteTemp, pawCategory, walkWindows, globeTemp, globeCategory } = globalThis;
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -47,6 +47,29 @@ check('常に asphalt より低温 (日射あり)',
   concreteTemp(30, 800, 2, 55) < asphaltTemp(30, 800, 2, 55));
 check('夜間 solar=0 で気温と一致', concreteTemp(18, 0, 2, 60) === 18);
 check('wind/rh未指定でもNaNにならない (concrete)', !isNaN(concreteTemp(25, 500)));
+
+console.log('globeTemp — direct-sun black-globe anchors');
+// Per ISO 7726 / 環境省 熱中症環境保健マニュアル references for outdoor Tg.
+inRange('真夏正午',        globeTemp(35, 950, 1.0), 60, 70);
+inRange('夏30°C晴天',      globeTemp(30, 900, 2.0), 55, 62);
+inRange('5月晴天正午',     globeTemp(26, 800, 2.0), 45, 52);
+inRange('梅雨晴れ間',      globeTemp(26, 600, 2.0), 38, 46);
+inRange('曇天',           globeTemp(25, 150, 2.0), 27, 32);
+// User's live condition — Amagasaki June clear noon, "もう熱い" feedback.
+inRange('Amagasaki 6月今', globeTemp(27, 750, 3.0), 45, 52);
+check('夜間 solar=0 で気温と一致', globeTemp(20, 0, 2) === 20);
+check('風が強いほど低温', globeTemp(30, 800, 6) < globeTemp(30, 800, 2));
+check('wind未指定でもNaNにならない (globe)', !isNaN(globeTemp(25, 500)));
+check('asphalt より globe のが直射では高温',
+  globeTemp(30, 800, 2) > asphaltTemp(30, 800, 2, 55));
+
+console.log('globeCategory — boundaries (40 / 50 / 60)');
+check('39°C → safe (平気)',   globeCategory(39).level === 'safe');
+check('40°C → mild (暑い)',   globeCategory(40).level === 'mild');
+check('49.9°C → mild',        globeCategory(49.9).level === 'mild');
+check('50°C → warn (灼熱)',   globeCategory(50).level === 'warn');
+check('59.9°C → warn',        globeCategory(59.9).level === 'warn');
+check('60°C → danger (危険)', globeCategory(60).level === 'danger');
 
 console.log('pawCategory — boundaries (0 / 5 / 40 / 50)');
 check('-3°C → freeze', pawCategory(-3).level === 'freeze');

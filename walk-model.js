@@ -58,8 +58,33 @@
     return runs;
   }
 
+  // Black globe temperature (Tg) — what a black object in direct sunlight
+  // reaches. The "炎天下" reading from old-school outdoor thermometers, and
+  // the dominant term inside WBGT. Coefficient 0.030 is calibrated against
+  // ISO 7726 / 環境省 熱中症環境保健マニュアル references:
+  //   - 真夏正午 (air 35 / solar 950): 60–70°C  (typical "炎天下70°C近い")
+  //   - 夏30°C晴天 (solar 900): 55–62°C
+  //   - 曇天 (solar 150): ≈ air + 5°C
+  // No humidity term: a globe in direct sun heats from radiation, not
+  // affected by sweat evaporation the way the body is.
+  function globeTemp(air, solar, wind) {
+    const windFactor = 1.15 / (1 + 0.08 * Math.max(0, wind || 0));
+    return air + (solar || 0) * 0.030 * windFactor;
+  }
+
+  // Heat-stress band for the globe reading — only severe levels get marked,
+  // since "object in sun" is naturally hot even on mild days.
+  function globeCategory(t) {
+    if (t < 40) return { label: '平気',   level: 'safe' };
+    if (t < 50) return { label: '暑い',   level: 'mild' };
+    if (t < 60) return { label: '灼熱',   level: 'warn' };
+    return         { label: '危険',   level: 'danger' };
+  }
+
   root.asphaltTemp = asphaltTemp;
   root.concreteTemp = concreteTemp;
   root.pawCategory = pawCategory;
   root.walkWindows = walkWindows;
+  root.globeTemp = globeTemp;
+  root.globeCategory = globeCategory;
 })(typeof window !== 'undefined' ? window : globalThis);

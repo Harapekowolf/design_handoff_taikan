@@ -346,6 +346,27 @@ function AirQualityCard({ aqi, pm25, pm10 }) {
   );
 }
 
+// Direct-sun (black-globe) temperature badge on Home — the "炎天下" reading
+// that explains why standing in full sun feels hotter than the air temp suggests.
+function DirectSunBadge({ air, solar, wind }) {
+  const t = globeTemp(air, solar, wind);
+  const { label, level } = globeCategory(t);
+  const note = level === 'danger' ? '日陰に避難・水分補給を' :
+               level === 'warn'   ? '長時間の直射は危険' :
+               level === 'mild'   ? '日陰との差が大きい' :
+                                    '直射でも穏やか';
+  return (
+    <div className={`globe-badge lv-${level}`}>
+      <div className="globe-top">
+        <span className="globe-k">直射日光下 <span className="mono">Tg</span></span>
+        <span className="globe-v mono">{t.toFixed(1)}<span className="u">°C</span></span>
+        <span className="globe-cat">{label}</span>
+      </div>
+      <div className="globe-note">{note} · 黒球温度・WBGT 基準</div>
+    </div>
+  );
+}
+
 // Compact dog-paw ground summary on Home — tap to open the 散歩 screen.
 function PawCard({ onWalk }) {
   const d = window.APP_DATA.now;
@@ -442,6 +463,7 @@ function HomeM({ inSun, setInSun, tweaks, onWalk }) {
         </div>
 
         <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
+        <DirectSunBadge air={d.airTemp} solar={d.solar || 0} wind={d.windMS} />
         <AirQualityCard aqi={d.aqi} pm25={d.pm25} pm10={d.pm10} />
         <PawCard onWalk={onWalk} />
 
