@@ -135,7 +135,7 @@ function MobileApp() {
   }, [tweaks.theme]);
 
   const screens = {
-    home:   <HomeM inSun={inSun} setInSun={setInSun} tweaks={tweaks} />,
+    home:   <HomeM inSun={inSun} setInSun={setInSun} tweaks={tweaks} onWalk={() => setScreen('walk')} />,
     hourly: <HourlyM />,
     weekly: <WeeklyM />,
     outfit: <OutfitM />,
@@ -346,8 +346,33 @@ function AirQualityCard({ aqi, pm25, pm10 }) {
   );
 }
 
+// Compact dog-paw ground summary on Home — tap to open the 散歩 screen.
+function PawCard({ onWalk }) {
+  const d = window.APP_DATA.now;
+  const solar = d.solar || 0;
+  const asphalt = asphaltTemp(d.airTemp, solar, d.windMS, d.humidity);
+  const concrete = concreteTemp(d.airTemp, solar, d.windMS, d.humidity);
+  const soil = d.soilTemp != null ? d.soilTemp : d.airTemp + solar * 0.006;
+  // Headline category = the surface a dog is most likely to hit: asphalt.
+  const cat = pawCategory(asphalt);
+  return (
+    <button type="button" className={`paw-card lv-${cat.level}`} onClick={onWalk}>
+      <div className="paw-top">
+        <span className="paw-k"><IconPaw /> 犬の足元</span>
+        <span className="paw-cat">{cat.label}</span>
+        <span className="paw-go">散歩 →</span>
+      </div>
+      <div className="paw-row">
+        <span><span className="k">アスファルト</span><span className="v">{asphalt.toFixed(0)}°</span></span>
+        <span><span className="k">コンクリート</span><span className="v">{concrete.toFixed(0)}°</span></span>
+        <span><span className="k">土・芝</span><span className="v">{soil.toFixed(0)}°</span></span>
+      </div>
+    </button>
+  );
+}
+
 // ─── HOME ───
-function HomeM({ inSun, setInSun, tweaks }) {
+function HomeM({ inSun, setInSun, tweaks, onWalk }) {
   const d = window.APP_DATA.now;
   const [color, setColor] = React.useState(
     () => localStorage.getItem('taikan.m.color') || 'black'
@@ -377,8 +402,10 @@ function HomeM({ inSun, setInSun, tweaks }) {
   const modDelta = colorDelta + coverDelta;
 
   const baseSun = d.feelsLikeShade + boostedSunDelta;
-  const feels = (inSun ? baseSun : d.feelsLikeShade) + modDelta;
-  const sunCardVal = baseSun + modDelta;
+  // Defensive clamp: the math above already guarantees sun ≥ shade, but keep
+  // the invariant explicit so no future modifier path can invert them.
+  const sunCardVal = Math.max(d.feelsLikeShade, baseSun + modDelta);
+  const feels = inSun ? sunCardVal : d.feelsLikeShade;
 
   // API-driven factor contributions
   const solarDelta = +(d.feelsLikeSun - d.feelsLikeShade).toFixed(1);
@@ -416,6 +443,7 @@ function HomeM({ inSun, setInSun, tweaks }) {
 
         <WbgtBadge temp={d.airTemp} rh={d.humidity} solar={d.solar || 0} />
         <AirQualityCard aqi={d.aqi} pm25={d.pm25} pm10={d.pm10} />
+        <PawCard onWalk={onWalk} />
 
         {isNight && (
           <div className="night-note">
@@ -954,7 +982,9 @@ function WalkM() {
   const solar = d.solar || 0;
   const soil = d.soilTemp != null ? d.soilTemp : d.airTemp + solar * 0.006;
   const asphalt = asphaltTemp(d.airTemp, solar, d.windMS, d.humidity);
+  const concrete = concreteTemp(d.airTemp, solar, d.windMS, d.humidity);
   const aCat = pawCategory(asphalt);
+  const cCat = pawCategory(concrete);
   const sCat = pawCategory(soil);
 
   const ribbon = hours.map(h => {
@@ -992,12 +1022,18 @@ function WalkM() {
         <div className="sub">{verdictSub}</div>
       </div>
 
-      <div className="ground-cards">
+      <div className="ground-cards three">
         <div className={`g-c lv-${aCat.level}`}>
           <span className="lbl">アスファルト</span>
           <span className="n">{asphalt.toFixed(0)}<span className="u">°C</span></span>
           <span className="cat">{aCat.label}</span>
           <span className="d">{aCat.note}</span>
+        </div>
+        <div className={`g-c lv-${cCat.level}`}>
+          <span className="lbl">コンクリート</span>
+          <span className="n">{concrete.toFixed(0)}<span className="u">°C</span></span>
+          <span className="cat">{cCat.label}</span>
+          <span className="d">{cCat.note}</span>
         </div>
         <div className={`g-c lv-${sCat.level}`}>
           <span className="lbl">土・芝</span>
