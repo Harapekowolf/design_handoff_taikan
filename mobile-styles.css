@@ -597,6 +597,67 @@ body {
 .aq-card.lv-strict .aq-cat,
 .aq-card.lv-danger .aq-cat { color: var(--accent); }
 
+/* Dog-paw ground summary on Home (tap → 散歩 screen) */
+.paw-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--sans);
+  cursor: pointer;
+  margin-top: 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  border-left-width: 3px;
+  border-left-color: var(--ink-5);
+}
+.paw-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.paw-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+  text-transform: uppercase;
+}
+.paw-k svg { width: 14px; height: 14px; }
+.paw-cat {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.paw-go {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.06em;
+}
+.paw-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--ink-3);
+  flex-wrap: wrap;
+}
+.paw-row .k { color: var(--ink-4); letter-spacing: 0.04em; margin-right: 4px; }
+.paw-row .v { font-family: var(--mono); color: var(--ink-2); }
+.paw-card.lv-warn   { border-left-color: var(--accent); }
+.paw-card.lv-warn .paw-cat { color: var(--accent); }
+.paw-card.lv-danger {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+}
+.paw-card.lv-danger .paw-cat { color: var(--accent); }
+.paw-card.lv-freeze { border-left-color: var(--ink); }
+.paw-card.lv-freeze .paw-cat { color: var(--ink); }
+
 /* Heat-alert toggle in Tweaks panel */
 .alert-status {
   margin-top: 8px;
@@ -920,6 +981,13 @@ body {
   gap: 10px;
   margin-top: 18px;
 }
+.ground-cards.three {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ground-cards.three .g-c { padding: 12px 10px 14px; }
+.ground-cards.three .g-c .n { font-size: 30px; }
+.ground-cards.three .g-c .lbl { font-size: 8px; letter-spacing: 0.08em; }
 .ground-cards .g-c {
   background: var(--card);
   border: 1px solid var(--rule);

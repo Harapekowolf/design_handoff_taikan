@@ -26,6 +26,15 @@
     return air + (solar || 0) * 0.020 * windFactor * humidFactor;
   }
 
+  // Concrete / light pavement — higher albedo (~0.35 vs asphalt ~0.07)
+  // reflects more shortwave, so it heats ≈ 65% as much above air temp.
+  // Published summer reference: concrete 45–50°C when asphalt hits 55–60°C.
+  function concreteTemp(air, solar, wind, rh) {
+    const windFactor = 1.15 / (1 + 0.08 * Math.max(0, wind || 0));
+    const humidFactor = 1 - 0.005 * Math.max(0, (rh == null ? 50 : rh) - 50);
+    return air + (solar || 0) * 0.013 * windFactor * humidFactor;
+  }
+
   // 肉球セーフティ: 夏のやけど (アスファルト50°C+で数分で受傷) と
   // 冬の凍結・融雪剤の両方をカバーする5段階。
   function pawCategory(t) {
@@ -50,6 +59,7 @@
   }
 
   root.asphaltTemp = asphaltTemp;
+  root.concreteTemp = concreteTemp;
   root.pawCategory = pawCategory;
   root.walkWindows = walkWindows;
 })(typeof window !== 'undefined' ? window : globalThis);

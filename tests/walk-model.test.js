@@ -3,7 +3,7 @@
 // Asphalt anchors come from published field measurements (see walk-model.js).
 
 require('../walk-model.js');
-const { asphaltTemp, pawCategory, walkWindows } = globalThis;
+const { asphaltTemp, concreteTemp, pawCategory, walkWindows } = globalThis;
 
 let failed = 0;
 function check(name, cond, detail) {
@@ -36,6 +36,17 @@ check('湿度が高いほど低温',
 check('rh<=50 では湿度補正なし',
   Math.abs(asphaltTemp(28, 800, 2, 40) - asphaltTemp(28, 800, 2, 50)) < 1e-9);
 check('wind/rh未指定でもNaNにならない', !isNaN(asphaltTemp(25, 500)));
+
+console.log('concreteTemp — light-pavement anchors');
+// Published summer reference: concrete 45–50°C when asphalt is 55–60°C.
+inRange('真夏正午 concrete', concreteTemp(35.5, 950, 1.0, 55), 45, 50);
+inRange('5月晴天正午 concrete', concreteTemp(26, 800, 2.0, 60), 33, 38);
+// User's live condition (Amagasaki June noon) — keep a real-world anchor.
+inRange('Amagasaki 6月正午 concrete', concreteTemp(27, 750, 3.0, 75), 32, 36);
+check('常に asphalt より低温 (日射あり)',
+  concreteTemp(30, 800, 2, 55) < asphaltTemp(30, 800, 2, 55));
+check('夜間 solar=0 で気温と一致', concreteTemp(18, 0, 2, 60) === 18);
+check('wind/rh未指定でもNaNにならない (concrete)', !isNaN(concreteTemp(25, 500)));
 
 console.log('pawCategory — boundaries (0 / 5 / 40 / 50)');
 check('-3°C → freeze', pawCategory(-3).level === 'freeze');
